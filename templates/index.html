@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}CampusTrace &middot; Campus Lost &amp; Found{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">For students and staff on campus</p>
+  <h1>Lost something on campus?</h1>
+  <p class="lead">
+    Report it in seconds and let CampusTrace help connect it with a possible match.
+  </p>
+  <div class="button-row">
+    <a class="btn btn-primary" href="{{ url_for('report_lost') }}">Report Lost Item</a>
+    <a class="btn btn-accent" href="{{ url_for('report_found') }}">Report Found Item</a>
+    <a class="btn btn-ghost" href="{{ url_for('search') }}">Search Items</a>
+  </div>
+</section>
+
+<section class="stats" aria-label="Campus totals">
+  <article class="stat-card">
+    <p class="stat-value">{{ stats.lost }}</p>
+    <p class="stat-label">Total Lost Items</p>
+  </article>
+  <article class="stat-card">
+    <p class="stat-value">{{ stats.found }}</p>
+    <p class="stat-label">Total Found Items</p>
+  </article>
+  <article class="stat-card stat-good">
+    <p class="stat-value">{{ stats.resolved }}</p>
+    <p class="stat-label">Successfully Resolved</p>
+  </article>
+</section>
+
+<section class="how">
+  <h2>How CampusTrace works</h2>
+  <ol class="steps">
+    <li><strong>Report</strong><span>Log a lost or found item with a few details.</span></li>
+    <li><strong>Match</strong><span>Found reports are compared with existing lost reports.</span></li>
+    <li><strong>Verify</strong><span>The owner answers a secret question kept on the server.</span></li>
+    <li><strong>Resolve</strong><span>The item is marked resolved and stats update.</span></li>
+  </ol>
+</section>
+{% endblock %}

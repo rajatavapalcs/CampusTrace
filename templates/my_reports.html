@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}My Reports &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>My Reports</h1>
+  <p class="muted">Items you reported or resolved from this browser.</p>
+
+  {% if items %}
+    <div class="table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Tracking ID</th>
+            <th>Item Name</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Location</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr>
+              <td class="tracking">{{ tracking_id(item.id, item.status) }}</td>
+              <td><a href="{{ url_for('item_details', item_id=item.id) }}">{{ item.item_name }}</a></td>
+              <td>{{ item.category }}</td>
+              <td><span class="badge badge-{{ item.status | lower }}">{{ item.status }}</span></td>
+              <td>{{ item.location }}</td>
+              <td>{{ item.item_date | nice_date }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">You haven't reported anything yet.</p>
+    <div class="button-row">
+      <a class="btn btn-primary" href="{{ url_for('report_lost') }}">Report Lost Item</a>
+      <a class="btn btn-accent" href="{{ url_for('report_found') }}">Report Found Item</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

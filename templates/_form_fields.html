@@ -1,0 +1,65 @@
+{% macro item_fields(form, categories, locations, contact_label, contact_help, date_label) %}
+<div class="field">
+  <label for="item_name">Item Name <span class="req">*</span></label>
+  <input type="text" id="item_name" name="item_name" required maxlength="120"
+         placeholder="Casio fx-991CW Calculator" value="{{ form.item_name or '' }}" />
+</div>
+
+<div class="field-row">
+  <div class="field">
+    <label for="category">Category <span class="req">*</span></label>
+    <select id="category" name="category" required>
+      <option value="">Select a category</option>
+      {% for c in categories %}
+        <option value="{{ c }}" {% if form.category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="location">{{ 'Location' if date_label == 'Date Lost' else 'Location Found' }} <span class="req">*</span></label>
+    <select id="location" name="location" required>
+      <option value="">Select a location</option>
+      {% for l in locations %}
+        <option value="{{ l }}" {% if form.location == l %}selected{% endif %}>{{ l }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="field">
+  <label for="item_date">{{ date_label }} <span class="req">*</span></label>
+  <input type="date" id="item_date" name="item_date" required value="{{ form.item_date or '' }}" />
+</div>
+
+<div class="field">
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="3"
+            placeholder="Black calculator with a red sticker on the back.">{{ form.description or '' }}</textarea>
+</div>
+
+<div class="field">
+  <label for="contact">{{ contact_label }}</label>
+  <input type="text" id="contact" name="contact" placeholder="email or phone number"
+         value="{{ form.contact or '' }}" />
+  <p class="help">{{ contact_help }}</p>
+</div>
+
+<fieldset class="secret-box">
+  <legend>Ownership verification</legend>
+  <p class="help">
+    Only the question is ever shown publicly. The answer stays on the server and is never
+    sent to the browser.
+  </p>
+  <div class="field">
+    <label for="secret_hint">Secret Verification Question <span class="req">*</span></label>
+    <input type="text" id="secret_hint" name="secret_hint" required maxlength="160"
+           placeholder="What colour sticker is on the back of the calculator?"
+           value="{{ form.secret_hint or '' }}" />
+  </div>
+  <div class="field">
+    <label for="secret_answer">Secret Verification Answer <span class="req">*</span></label>
+    <input type="text" id="secret_answer" name="secret_answer" required maxlength="120"
+           placeholder="Red" value="{{ form.secret_answer or '' }}" />
+  </div>
+</fieldset>
+{% endmacro %}

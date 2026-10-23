@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_form_fields.html" import item_fields %}
+{% block title %}Report a Lost Item &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card form-card">
+  <h1>Report Lost Item</h1>
+  <p class="muted">Tell us what went missing. It takes less than a minute.</p>
+
+  <form method="post" novalidate data-validate>
+    {{ item_fields(form, categories, locations, 'Contact (email or phone)',
+       'Shared only with campus staff handling the report.', 'Date Lost') }}
+    <button class="btn btn-primary btn-block" type="submit">Report Lost Item</button>
+  </form>
+</section>
+{% endblock %}

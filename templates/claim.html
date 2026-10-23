@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Claim {{ item.item_name }} &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card form-card">
+  <h1>Claim This Item</h1>
+  <p class="muted">{{ item.item_name }} &middot; {{ item.category }} &middot; {{ item.location }}</p>
+  <p>Tracking ID: <span class="tracking">{{ tracking_id }}</span></p>
+
+  <h2 class="sub">Verification Question</h2>
+  <p class="question">{{ item.secret_hint }}</p>
+
+  {% if verified %}
+    <p class="notice notice-good">Verification Successful.</p>
+    {% if item.status != 'RESOLVED' %}
+      <form method="post" action="{{ url_for('resolve', item_id=item.id) }}">
+        <button class="btn btn-success" type="submit">Mark as RESOLVED</button>
+      </form>
+    {% else %}
+      <p class="notice notice-good">This item is already marked RESOLVED.</p>
+    {% endif %}
+  {% else %}
+    <form method="post" novalidate data-validate>
+      <div class="field">
+        <label for="answer">Your answer <span class="req">*</span></label>
+        <input type="text" id="answer" name="answer" required autocomplete="off"
+               placeholder="Type your answer" />
+        <p class="help">Answers ignore capitalisation and extra spaces.</p>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Verify Ownership</button>
+    </form>
+  {% endif %}
+
+  <p><a href="{{ url_for('item_details', item_id=item.id) }}">Back to item details</a></p>
+</section>
+{% endblock %}

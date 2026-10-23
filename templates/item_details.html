@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ item.item_name }} &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <div class="card-top">
+    <h1>{{ item.item_name }}</h1>
+    <span class="badge badge-{{ item.status | lower }}">{{ item.status }}</span>
+  </div>
+
+  {% if just_reported %}
+    <p class="notice">Your item has been reported successfully.</p>
+  {% endif %}
+
+  <dl class="meta meta-wide">
+    <div><dt>Category</dt><dd>{{ item.category }}</dd></div>
+    <div><dt>Location</dt><dd>{{ item.location }}</dd></div>
+    <div><dt>Date</dt><dd>{{ item.item_date | nice_date }}</dd></div>
+    <div><dt>Tracking ID</dt><dd class="tracking">{{ tracking_id }}</dd></div>
+  </dl>
+
+  <h2 class="sub">Description</h2>
+  <p class="description">{{ item.description or 'No description provided.' }}</p>
+
+  <p class="help">Contact details and the verification answer are kept private on the server.</p>
+
+  {% if item.status != 'RESOLVED' %}
+    <a class="btn btn-primary" href="{{ url_for('claim', item_id=item.id) }}">Claim This Item</a>
+  {% else %}
+    <p class="notice notice-good">This item has been returned and marked RESOLVED.</p>
+  {% endif %}
+</section>
+
+{% if matches is not none %}
+<section class="matches">
+  <h2>Reported Lost Items That Match</h2>
+  {% if matches %}
+    <div class="card-grid">
+      {% for m in matches %}
+        <article class="card match-card">
+          <h3>{{ m.item_name }}</h3>
+          <p class="match-score">{{ m.score }}% Match</p>
+          <dl class="meta">
+            <div><dt>Category</dt><dd>{{ m.category }}</dd></div>
+            <div><dt>Location</dt><dd>{{ m.location }}</dd></div>
+            <div><dt>Date</dt><dd>{{ m.item_date | nice_date }}</dd></div>
+          </dl>
+          <p class="description">{{ m.description }}</p>
+          <a class="btn btn-ghost" href="{{ url_for('item_details', item_id=m.id) }}">View Details</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No likely matches found yet.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

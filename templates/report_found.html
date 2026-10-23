@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_form_fields.html" import item_fields %}
+{% block title %}Report a Found Item &middot; CampusTrace{% endblock %}
+
+{% block content %}
+{% if matches is not none %}
+  <section class="card success-card">
+    <h1>Found item reported</h1>
+    <p>Tracking ID: <strong class="tracking">{{ tracking_id }}</strong></p>
+    <p>Status: <span class="badge badge-found">FOUND</span></p>
+    <p><a href="{{ url_for('item_details', item_id=reported_item.id) }}">View your report</a></p>
+  </section>
+
+  <section class="matches">
+    <h2>Reported Lost Items That Match</h2>
+    {% if matches %}
+      <div class="card-grid">
+        {% for m in matches %}
+          <article class="card match-card">
+            <h3>{{ m.item_name }}</h3>
+            <p class="match-score">{{ m.score }}% Match</p>
+            <dl class="meta">
+              <div><dt>Category</dt><dd>{{ m.category }}</dd></div>
+              <div><dt>Location</dt><dd>{{ m.location }}</dd></div>
+              <div><dt>Date</dt><dd>{{ m.item_date | nice_date }}</dd></div>
+            </dl>
+            <p class="description">{{ m.description }}</p>
+            <a class="btn btn-ghost" href="{{ url_for('item_details', item_id=m.id) }}">View Details</a>
+          </article>
+        {% endfor %}
+      </div>
+      <p class="muted small">The percentage is a similarity score between two reports, not a
+        probability of ownership.</p>
+    {% else %}
+      <p class="empty">No likely matches found yet.</p>
+    {% endif %}
+  </section>
+
+  <p><a class="btn btn-accent" href="{{ url_for('report_found') }}">Report another found item</a></p>
+{% else %}
+<section class="card form-card">
+  <h1>Report Found Item</h1>
+  <p class="muted">Thanks for helping. We'll compare it with existing lost reports right away.</p>
+
+  <form method="post" novalidate data-validate>
+    {{ item_fields(form, categories, locations, 'Contact / Drop-off information',
+       'For example: collect at the library counter.', 'Date Found') }}
+    <button class="btn btn-accent btn-block" type="submit">Report Found Item</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

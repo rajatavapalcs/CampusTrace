@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Local database (campus data should not be committed)
+*.db
+*.sqlite3
+
+# Environment / editor
+.env
+.DS_Store

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Search Items &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Search Items</h1>
+  <form class="search-form" method="get" action="{{ url_for('search') }}">
+    <div class="field">
+      <label for="q">Search</label>
+      <input type="search" id="q" name="q" placeholder="Search item name..." value="{{ query }}" />
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" name="category">
+          <option value="All">All</option>
+          {% for c in categories %}
+            <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="location">Location</label>
+        <select id="location" name="location">
+          <option value="All">All</option>
+          {% for l in locations %}
+            <option value="{{ l }}" {% if selected_location == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="All">All</option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if selected_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="button-row">
+      <button class="btn btn-primary" type="submit">Search</button>
+      <a class="btn btn-ghost" href="{{ url_for('search') }}">Reset</a>
+    </div>
+  </form>
+</section>
+
+<section>
+  <h2>{{ results | length }} result{{ '' if results | length == 1 else 's' }}</h2>
+  {% if results %}
+    <div class="card-grid">
+      {% for item in results %}
+        <article class="card item-card">
+          <div class="card-top">
+            <h3>{{ item.item_name }}</h3>
+            <span class="badge badge-{{ item.status | lower }}">{{ item.status }}</span>
+          </div>
+          <dl class="meta">
+            <div><dt>Category</dt><dd>{{ item.category }}</dd></div>
+            <div><dt>Location</dt><dd>{{ item.location }}</dd></div>
+            <div><dt>Date</dt><dd>{{ item.item_date | nice_date }}</dd></div>
+          </dl>
+          <p class="description">{{ item.description }}</p>
+          <a class="btn btn-ghost" href="{{ url_for('item_details', item_id=item.id) }}">View Details</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No items match this search yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
