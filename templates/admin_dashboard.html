@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Admin Dashboard</h1>
+  <p class="muted">Review reports, claim requests, and account status.</p>
+
+  <div class="stats admin-stats">
+    <article class="stat-card">
+      <p class="stat-value">{{ stats.total_reports }}</p>
+      <p class="stat-label">Total reports</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-value">{{ stats.pending_claims }}</p>
+      <p class="stat-label">Pending or disputed claims</p>
+    </article>
+    <article class="stat-card stat-good">
+      <p class="stat-value">{{ stats.resolved_items }}</p>
+      <p class="stat-label">Resolved items</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-value">{{ stats.registered_users }}</p>
+      <p class="stat-label">Registered users</p>
+    </article>
+  </div>
+
+  <div class="button-row">
+    <a class="btn btn-primary" href="{{ url_for('admin_reports') }}">Manage reports</a>
+    <a class="btn btn-accent" href="{{ url_for('admin_claims') }}">Review claims</a>
+    <a class="btn btn-ghost" href="{{ url_for('admin_users') }}">Manage accounts</a>
+  </div>
+</section>
+{% endblock %}

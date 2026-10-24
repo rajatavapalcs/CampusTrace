@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Manage Reports &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Manage Reports</h1>
+  <p class="muted">Hidden reports are not visible in public search or item pages.</p>
+
+  {% if reports %}
+    <div class="table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Tracking ID</th>
+            <th>Report</th>
+            <th>Status</th>
+            <th>Visibility</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in reports %}
+            <tr>
+              <td class="tracking">{{ tracking_id(item.id, item.status) }}</td>
+              <td>
+                {{ item.item_name }}<br />
+                <span class="muted small">
+                  {{ item.category }} · {{ item.location }} · {{ item.item_date | nice_date }}
+                </span>
+                <br />
+                <span class="small">{{ item.description or 'No description provided.' }}</span>
+              </td>
+              <td><span class="badge badge-{{ item.status | lower }}">{{ item.status }}</span></td>
+              <td>{{ 'Hidden' if item.is_hidden else 'Public' }}</td>
+              <td>
+                <div class="admin-actions">
+                  {% if item.is_hidden %}
+                    <form method="post" action="{{ url_for('admin_moderate_report', item_id=item.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="action" value="restore" />
+                      <button class="btn btn-ghost" type="submit">Restore</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{{ url_for('admin_moderate_report', item_id=item.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="action" value="hide" />
+                      <button class="btn btn-ghost" type="submit">Hide</button>
+                    </form>
+                  {% endif %}
+                  {% if item.status != 'RESOLVED' %}
+                    <form method="post" action="{{ url_for('admin_resolve_report', item_id=item.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <button class="btn btn-success" type="submit">Mark resolved</button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('admin_moderate_report', item_id=item.id) }}"
+                        onsubmit="return confirm('Permanently delete this report and its claim records?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <input type="hidden" name="action" value="delete" />
+                    <button class="btn btn-accent" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">There are no reports.</p>
+  {% endif %}
+</section>
+{% endblock %}

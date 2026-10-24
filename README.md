@@ -25,6 +25,49 @@ Then open http://127.0.0.1:5000
 `database.db` is created automatically on first run, and sample data is
 inserted once (never duplicated on later starts).
 
+## Roles and admin access
+
+Public registration always creates a **Student** account. Existing accounts are
+migrated as Students on the next startup. The application does not provide a
+public role-change page or accept a role from a registration form.
+
+Initialize the first Admin using trusted command-line access to the machine
+hosting the application's SQLite database:
+
+```powershell
+flask --app app create-admin
+```
+
+The command prompts privately for a name, email, and password; it creates no
+hardcoded credentials and refuses to create another Admin once one exists.
+Keep shell/database access restricted to trusted operators. Admin role changes
+are not available through public routes. The Admin dashboard provides report
+moderation, claim review, account suspension/reactivation, and statistics.
+
+Admins can hide and restore reports or permanently delete a report and its
+associated claim records. Hidden reports are omitted from public search,
+matches, details, and public statistics. Claim answers are checked in the
+existing verification flow and are never stored in claim records. A Student
+can request staff review after a failed verification or flag their own
+verified claim; an Admin can approve/reject pending or disputed claims, flag
+verified claims, and mark reports resolved.
+
+Both roles use the existing shared login page. By default, successful Student
+login redirects to the public/student homepage, while successful Admin login
+redirects to the Admin dashboard. A safe same-role `next` destination is
+preserved for login-required deep links.
+
+Account roles and active status are checked against SQLite on every request.
+Suspended accounts cannot log in or continue using authenticated routes.
+Self-suspension and suspension of the last active Admin are blocked. The
+Admin-only management endpoints also require a session CSRF token.
+
+Set `CAMPUSTRACE_SECRET_KEY` to a strong secret in the deployment environment.
+The app refuses to start on Render without it; local development uses a
+random, process-local key. On Render, the SQLite database (including role
+assignments and account status) must be on persistent storage if it needs to
+survive instance replacement.
+
 ## Files
 
 ```
@@ -32,10 +75,10 @@ CampusTrace/
 ├── app.py            # Flask routes, server-side validation, error handling
 ├── database.py       # sqlite3 helpers (parameterized queries), seed data
 ├── matching.py       # calculate_match_score() - transparent scoring, no AI
-├── schema.sql        # items table
+├── schema.sql        # items, users, and claim records
 ├── requirements.txt  # Flask
 ├── templates/        # base, index, report_lost, report_found, search,
-│                     # item_details, claim, my_reports, error
+│                     # item_details, claim, my_reports, admin pages, error
 └── static/
     ├── css/style.css
     └── js/script.js
@@ -53,6 +96,10 @@ CampusTrace/
 | GET/POST | `/item/<id>/claim` | Show the secret question, verify the answer server-side |
 | POST | `/item/<id>/resolve` | Mark an item RESOLVED (only after verification) |
 | GET | `/my-reports` | Items reported from this browser |
+| GET | `/admin` | Admin dashboard and aggregate statistics |
+| GET | `/admin/reports` | Review, hide, restore, resolve, or delete reports |
+| GET | `/admin/claims` | Review pending, disputed, and verified claims |
+| GET | `/admin/users` | Suspend or reactivate accounts |
 
 - `PUSH_TO_GITHUB.md` — step-by-step guide to upload this project to GitHub
 

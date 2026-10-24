@@ -43,6 +43,7 @@
   <p class="muted">Thanks for helping. We'll compare it with existing lost reports right away.</p>
 
   <form method="post" novalidate data-validate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     {{ item_fields(form, categories, locations, 'Contact / Drop-off information',
        'For example: collect at the library counter.', 'Date Found') }}
     <button class="btn btn-accent btn-block" type="submit">Report Found Item</button>

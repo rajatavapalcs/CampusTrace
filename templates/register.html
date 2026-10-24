@@ -7,6 +7,7 @@
   <p class="muted">Register to report lost or found items on campus.</p>
 
   <form method="post" novalidate data-validate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <div class="field">
       <label for="name">Full Name <span class="req">*</span></label>
       <input type="text" id="name" name="name" required maxlength="120"

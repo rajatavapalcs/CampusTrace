@@ -14,13 +14,21 @@
     <p class="notice notice-good">Verification Successful.</p>
     {% if item.status != 'RESOLVED' %}
       <form method="post" action="{{ url_for('resolve', item_id=item.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button class="btn btn-success" type="submit">Mark as RESOLVED</button>
       </form>
     {% else %}
       <p class="notice notice-good">This item is already marked RESOLVED.</p>
     {% endif %}
+    {% if claim_id %}
+      <form method="post" action="{{ url_for('dispute_own_claim', claim_id=claim_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button class="btn btn-ghost" type="submit">Request staff review</button>
+      </form>
+    {% endif %}
   {% else %}
     <form method="post" novalidate data-validate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div class="field">
         <label for="answer">Your answer <span class="req">*</span></label>
         <input type="text" id="answer" name="answer" required autocomplete="off"
@@ -29,6 +37,17 @@
       </div>
       <button class="btn btn-primary btn-block" type="submit">Verify Ownership</button>
     </form>
+    {% if claim_failed %}
+      <form method="post" action="{{ url_for('request_claim_review', item_id=item.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="field">
+          <label for="reason">Request staff review</label>
+          <textarea id="reason" name="reason" maxlength="500" required
+                    placeholder="Tell staff why this claim needs review"></textarea>
+        </div>
+        <button class="btn btn-ghost" type="submit">Send review request</button>
+      </form>
+    {% endif %}
   {% endif %}
 
   <p><a href="{{ url_for('item_details', item_id=item.id) }}">Back to item details</a></p>

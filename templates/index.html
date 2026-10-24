@@ -9,9 +9,11 @@
     Report a missing or found item at the desk. CampusTrace compares found reports
     with open lost reports so they can be returned.
   </p>
-  <div class="button-row">
-    <a class="btn btn-primary" href="{{ url_for('report_lost') }}">Report Lost Item</a>
-    <a class="btn btn-accent" href="{{ url_for('report_found') }}">Report Found Item</a>
+  <div class="button-row hero-actions">
+    {% if current_user %}
+      <a class="btn btn-primary" href="{{ url_for('report_lost') }}">Report Lost Item</a>
+      <a class="btn btn-accent" href="{{ url_for('report_found') }}">Report Found Item</a>
+    {% endif %}
     <a class="btn btn-ghost" href="{{ url_for('search') }}">Search Items</a>
   </div>
 </section>

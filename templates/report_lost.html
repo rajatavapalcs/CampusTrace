@@ -8,6 +8,7 @@
   <p class="muted">Tell us what went missing. It takes less than a minute.</p>
 
   <form method="post" novalidate data-validate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     {{ item_fields(form, categories, locations, 'Contact (email or phone)',
        'Shared only with campus staff handling the report.', 'Date Lost') }}
     <button class="btn btn-primary btn-block" type="submit">Report Lost Item</button>

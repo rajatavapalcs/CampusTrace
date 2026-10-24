@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Manage Accounts &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Manage Accounts</h1>
+  <p class="muted">Suspended accounts cannot log in or use authenticated features. Roles cannot be changed here.</p>
+
+  {% if users %}
+    <div class="table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            <tr>
+              <td>{{ user.name }}</td>
+              <td>{{ user.email }}</td>
+              <td>{{ user.role | title }}</td>
+              <td>{{ 'Active' if user.is_active else 'Suspended' }}</td>
+              <td>{{ user.created_at }}</td>
+              <td>
+                {% if user.id != current_user_id %}
+                  <form method="post" action="{{ url_for('admin_set_user_status', user_id=user.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if user.is_active %}
+                      <input type="hidden" name="status" value="suspended" />
+                      <button class="btn btn-accent" type="submit">Suspend</button>
+                    {% else %}
+                      <input type="hidden" name="status" value="active" />
+                      <button class="btn btn-success" type="submit">Reactivate</button>
+                    {% endif %}
+                  </form>
+                {% else %}
+                  <span class="muted">Current account</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">There are no accounts.</p>
+  {% endif %}
+</section>
+{% endblock %}

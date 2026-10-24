@@ -20,16 +20,33 @@
           <small>Find it. Report it. Return it.</small>
         </span>
       </a>
+      <div class="history-controls" role="group" aria-label="Browser history">
+        <button class="history-button" id="historyBack" type="button"
+                aria-label="Go back" title="Go back" disabled>
+          <span aria-hidden="true">&larr;</span>
+        </button>
+        <button class="history-button" id="historyForward" type="button"
+                aria-label="Go forward" title="Go forward" disabled>
+          <span aria-hidden="true">&rarr;</span>
+        </button>
+      </div>
       <button class="nav-toggle" id="navToggle" type="button" aria-label="Toggle navigation" aria-controls="siteNav">Menu</button>
       <nav class="site-nav" id="siteNav">
         <a href="{{ url_for('home') }}" {% if request.endpoint == 'home' %}class="is-active"{% endif %}>Home</a>
-        <a href="{{ url_for('report_lost') }}" {% if request.endpoint == 'report_lost' %}class="is-active"{% endif %}>Report Lost</a>
-        <a href="{{ url_for('report_found') }}" {% if request.endpoint == 'report_found' %}class="is-active"{% endif %}>Report Found</a>
         <a href="{{ url_for('search') }}" {% if request.endpoint == 'search' %}class="is-active"{% endif %}>Search</a>
-        {% if current_user %}
+        {% if current_user and current_user.role == 'STUDENT' %}
+          <a href="{{ url_for('report_lost') }}" {% if request.endpoint == 'report_lost' %}class="is-active"{% endif %}>Report Lost</a>
+          <a href="{{ url_for('report_found') }}" {% if request.endpoint == 'report_found' %}class="is-active"{% endif %}>Report Found</a>
           <a href="{{ url_for('my_reports') }}" {% if request.endpoint == 'my_reports' %}class="is-active"{% endif %}>My Reports</a>
+        {% elif current_user and current_user.role == 'ADMIN' %}
+          <a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}class="is-active"{% endif %}>Admin Dashboard</a>
+          <a href="{{ url_for('admin_reports') }}" {% if request.endpoint == 'admin_reports' or request.endpoint == 'admin_moderate_report' or request.endpoint == 'admin_resolve_report' %}class="is-active"{% endif %}>Manage Reports</a>
+          <a href="{{ url_for('admin_claims') }}" {% if request.endpoint == 'admin_claims' or request.endpoint == 'admin_review_claim' or request.endpoint == 'admin_dispute_claim' %}class="is-active"{% endif %}>Review Claims</a>
+          <a href="{{ url_for('admin_users') }}" {% if request.endpoint == 'admin_users' or request.endpoint == 'admin_set_user_status' %}class="is-active"{% endif %}>Manage Accounts</a>
+        {% endif %}
+        {% if current_user %}
           <span class="nav-divider"></span>
-          <span class="nav-user">{{ current_user.name }}</span>
+          <span class="nav-user">{{ current_user.name }} · {{ current_user.role | title }}</span>
           <a href="{{ url_for('logout') }}" class="nav-auth">Log out</a>
         {% else %}
           <span class="nav-divider"></span>

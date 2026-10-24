@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Review Claims &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Review Claims</h1>
+  <p class="muted">Answers are never stored or shown here. Review requests contain only the claimant's reason and verification outcome.</p>
+
+  {% if claims %}
+    <div class="table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Claimant</th>
+            <th>Item</th>
+            <th>Status</th>
+            <th>Review reason</th>
+            <th>Submitted</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for claim in claims %}
+            <tr>
+              <td>{{ claim.claimant_name }}<br /><span class="muted small">{{ claim.claimant_email }}</span></td>
+              <td>{{ claim.item_name }}<br /><span class="muted small">{{ claim.item_status }}</span></td>
+              <td>{{ claim.status }}</td>
+              <td>{{ claim.reason or 'Verified answer' }}</td>
+              <td>{{ claim.created_at }}</td>
+              <td>
+                <div class="admin-actions">
+                  {% if claim.status in ('PENDING', 'DISPUTED') %}
+                    <form method="post" action="{{ url_for('admin_review_claim', claim_id=claim.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="decision" value="APPROVED" />
+                      <button class="btn btn-success" type="submit">Approve &amp; resolve</button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin_review_claim', claim_id=claim.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="decision" value="REJECTED" />
+                      <button class="btn btn-accent" type="submit">Reject</button>
+                    </form>
+                  {% elif claim.status in ('VERIFIED', 'RESOLVED', 'APPROVED') %}
+                    <form method="post" action="{{ url_for('admin_dispute_claim', claim_id=claim.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <button class="btn btn-ghost" type="submit">Flag for review</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">There are no claim records yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

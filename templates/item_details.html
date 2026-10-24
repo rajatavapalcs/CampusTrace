@@ -25,7 +25,11 @@
   <p class="help">Contact details and the verification answer are kept private on the server.</p>
 
   {% if item.status != 'RESOLVED' %}
-    <a class="btn btn-primary" href="{{ url_for('claim', item_id=item.id) }}">Claim This Item</a>
+    {% if current_user %}
+      <a class="btn btn-primary" href="{{ url_for('claim', item_id=item.id) }}">Claim This Item</a>
+    {% else %}
+      <a class="btn btn-primary" href="{{ url_for('login', next=url_for('claim', item_id=item.id)) }}">Log in to claim</a>
+    {% endif %}
   {% else %}
     <p class="notice notice-good">This item has been returned and marked RESOLVED.</p>
   {% endif %}

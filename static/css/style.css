@@ -102,6 +102,35 @@ h1, h2, h3,
 .brand strong { display: block; font-size: 1.35rem; font-weight: 700; }
 .brand small { color: #c9bea6; font-size: 0.75rem; }
 
+.history-controls { display: flex; align-items: center; gap: 4px; }
+.history-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #e6dcc8;
+  background: transparent;
+  border: 1px solid rgba(217, 200, 154, 0.35);
+  font: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.history-button:hover:not(:disabled),
+.history-button:focus-visible {
+  color: #fff;
+  border-color: var(--brass);
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+.history-button:disabled {
+  color: #9e937c;
+  border-color: rgba(217, 200, 154, 0.16);
+  opacity: 0.55;
+  cursor: default;
+}
+
 .site-nav { display: flex; gap: 2px 4px; flex-wrap: wrap; }
 .site-nav a {
   color: #e6dcc8;
@@ -152,6 +181,8 @@ h1, h2, h3,
   padding: 8px 0 28px;
   border-bottom: 1px solid var(--line);
 }
+.hero-actions { align-items: center; }
+.hero-actions .btn { text-align: center; }
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.18em;
@@ -426,6 +457,10 @@ input.invalid, select.invalid, textarea.invalid { border-bottom-color: var(--bri
 }
 .report-table a { font-weight: 600; text-decoration: none; }
 .report-table a:hover { text-decoration: underline; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-actions form { margin: 0; }
+.admin-actions .btn { padding: 6px 9px; font-size: 0.78rem; }
+.admin-stats { grid-template-columns: repeat(4, 1fr); }
 
 /* Footer */
 .site-footer {
@@ -443,17 +478,21 @@ input.invalid, select.invalid, textarea.invalid { border-bottom-color: var(--bri
 /* Responsive */
 @media (max-width: 760px) {
   .stats { grid-template-columns: 1fr; }
+  .admin-stats { grid-template-columns: 1fr; }
   .stat-card {
     border-right: 0;
     border-top: 1px solid var(--line);
     padding: 16px 0;
   }
   .stat-card:first-child { border-top: 0; }
+  .history-controls { margin-left: auto; }
   .nav-toggle { display: block; }
   .site-nav { display: none; width: 100%; flex-direction: column; padding: 4px 0 8px; }
   .site-nav.open { display: flex; }
   .site-nav a { padding: 10px 0; border-bottom: 1px solid rgba(217, 200, 154, 0.25); }
   .hero h1 { max-width: none; }
+  .hero-actions { align-items: stretch; flex-direction: column; }
+  .hero-actions .btn { width: 100%; }
   .form-card .btn-block { width: 100%; }
   .steps li { grid-template-columns: 2rem 1fr; }
   .steps span { grid-column: 2; }

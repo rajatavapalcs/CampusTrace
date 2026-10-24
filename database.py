@@ -43,6 +43,7 @@ LOCATIONS = [
 ]
 
 STATUSES = ["LOST", "FOUND", "RESOLVED"]
+ROLES = ("STUDENT", "ADMIN")
 
 # Public columns only. The secret answer is never part of this list, so it can
 # never leak into a template, a card or an API response by accident.
@@ -54,16 +55,37 @@ PUBLIC_COLUMNS = (
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 def init_db():
-    """Create database.db and the items table if they do not exist yet."""
+    """Create the database and safely add role/moderation fields to old DBs."""
     with open(SCHEMA_PATH, "r", encoding="utf-8") as handle:
         schema = handle.read()
     conn = get_connection()
     try:
         conn.executescript(schema)
+        migrations = {
+            "users": {
+                "role": "TEXT NOT NULL DEFAULT 'STUDENT' CHECK (role IN ('STUDENT', 'ADMIN'))",
+                "is_active": "INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))",
+            },
+            "items": {
+                "is_hidden": "INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0, 1))",
+            },
+        }
+        for table, columns in migrations.items():
+            existing = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(%s)" % table).fetchall()
+            }
+            for column, definition in columns.items():
+                if column not in existing:
+                    conn.execute(
+                        "ALTER TABLE %s ADD COLUMN %s %s"
+                        % (table, column, definition)
+                    )
         conn.commit()
     finally:
         conn.close()
@@ -109,9 +131,21 @@ def get_item(item_id):
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT %s, secret_hint FROM items WHERE id = ?" % PUBLIC_COLUMNS,
+            "SELECT %s, secret_hint FROM items WHERE id = ? AND is_hidden = 0"
+            % PUBLIC_COLUMNS,
             (item_id,),
         ).fetchone()
+    finally:
+        conn.close()
+
+
+def get_admin_reports():
+    """Return report fields safe for staff review, never contact or answers."""
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT %s, is_hidden FROM items ORDER BY id DESC" % PUBLIC_COLUMNS,
+        ).fetchall()
     finally:
         conn.close()
 
@@ -120,7 +154,8 @@ def get_items_by_status(status):
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT %s FROM items WHERE status = ? ORDER BY id DESC" % PUBLIC_COLUMNS,
+            "SELECT %s FROM items WHERE status = ? AND is_hidden = 0 ORDER BY id DESC"
+            % PUBLIC_COLUMNS,
             (status,),
         ).fetchall()
     finally:
@@ -134,7 +169,7 @@ def get_items_by_ids(ids):
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT %s FROM items WHERE id IN (%s) ORDER BY id DESC"
+            "SELECT %s FROM items WHERE id IN (%s) AND is_hidden = 0 ORDER BY id DESC"
             % (PUBLIC_COLUMNS, placeholders),
             tuple(ids),
         ).fetchall()
@@ -144,6 +179,7 @@ def get_items_by_ids(ids):
 
 def search_items(query="", category="All", location="All", status="All"):
     sql = "SELECT %s FROM items WHERE 1 = 1" % PUBLIC_COLUMNS
+    sql += " AND is_hidden = 0"
     params = []
 
     if query:
@@ -178,7 +214,7 @@ def get_stats():
                 SUM(CASE WHEN status = 'LOST' THEN 1 ELSE 0 END) AS lost,
                 SUM(CASE WHEN status = 'FOUND' THEN 1 ELSE 0 END) AS found,
                 SUM(CASE WHEN status = 'RESOLVED' THEN 1 ELSE 0 END) AS resolved
-            FROM items
+            FROM items WHERE is_hidden = 0
             """
         ).fetchone()
         return {
@@ -209,6 +245,237 @@ def mark_resolved(item_id):
     try:
         conn.execute("UPDATE items SET status = 'RESOLVED' WHERE id = ?", (item_id,))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_claim_resolved(claim_id, user_id):
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE claims SET status = 'RESOLVED'
+            WHERE id = ? AND user_id = ? AND status = 'VERIFIED'
+            """,
+            (claim_id, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def admin_set_item_resolved(item_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "UPDATE items SET status = 'RESOLVED' WHERE id = ?", (item_id,)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def moderate_item(item_id, action):
+    if action not in ("hide", "restore", "delete"):
+        raise ValueError("Invalid report moderation action.")
+    conn = get_connection()
+    try:
+        if action == "delete":
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM claims WHERE item_id = ?", (item_id,))
+            cursor = conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+        else:
+            hidden = 1 if action == "hide" else 0
+            cursor = conn.execute(
+                "UPDATE items SET is_hidden = ? WHERE id = ?", (hidden, item_id)
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def create_verified_claim(user_id, item_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO claims (item_id, user_id, status, created_at)
+            VALUES (?, ?, 'VERIFIED', ?)
+            """,
+            (item_id, user_id, datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def create_claim_review(user_id, item_id, reason):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO claims (item_id, user_id, status, reason, created_at)
+            VALUES (?, ?, 'PENDING', ?, ?)
+            """,
+            (item_id, user_id, reason, datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_admin_claims():
+    conn = get_connection()
+    try:
+        return conn.execute(
+            """
+            SELECT claims.id, claims.item_id, claims.user_id, claims.status,
+                   claims.reason, claims.created_at, claims.reviewed_at,
+                   users.name AS claimant_name, users.email AS claimant_email,
+                   items.item_name, items.status AS item_status
+            FROM claims
+            JOIN users ON users.id = claims.user_id
+            JOIN items ON items.id = claims.item_id
+            ORDER BY CASE claims.status
+                WHEN 'PENDING' THEN 0 WHEN 'DISPUTED' THEN 1 ELSE 2 END,
+                claims.id DESC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def review_claim(claim_id, admin_id, decision):
+    if decision not in ("APPROVED", "REJECTED"):
+        raise ValueError("Invalid claim decision.")
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT item_id FROM claims WHERE id = ? AND status IN ('PENDING', 'DISPUTED')",
+            (claim_id,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+        conn.execute(
+            """
+            UPDATE claims
+            SET status = ?, reviewed_by = ?, reviewed_at = ?
+            WHERE id = ?
+            """,
+            (
+                decision,
+                admin_id,
+                datetime.now().isoformat(timespec="seconds"),
+                claim_id,
+            ),
+        )
+        if decision == "APPROVED":
+            conn.execute(
+                "UPDATE items SET status = 'RESOLVED' WHERE id = ?", (row["item_id"],)
+            )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def dispute_claim(claim_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE claims SET status = 'DISPUTED'
+            WHERE id = ? AND user_id = ? AND status IN ('VERIFIED', 'APPROVED')
+            """,
+            (claim_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def admin_dispute_claim(claim_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE claims SET status = 'DISPUTED'
+            WHERE id = ? AND status IN ('VERIFIED', 'RESOLVED', 'APPROVED')
+            """,
+            (claim_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_admin_dashboard_stats():
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM items) AS total_reports,
+                (SELECT COUNT(*) FROM claims
+                 WHERE status IN ('PENDING', 'DISPUTED')) AS pending_claims,
+                (SELECT COUNT(*) FROM items WHERE status = 'RESOLVED') AS resolved_items,
+                (SELECT COUNT(*) FROM users) AS registered_users
+            """
+        ).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def get_admin_users():
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT id, name, email, role, is_active, created_at FROM users ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def set_user_active(user_id, is_active, acting_admin_id):
+    if is_active not in (0, 1):
+        raise ValueError("Invalid account status.")
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        user = conn.execute(
+            "SELECT id, role, is_active FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            conn.rollback()
+            return "not_found"
+        if is_active == 0 and user_id == acting_admin_id:
+            conn.rollback()
+            return "self"
+        if (
+            is_active == 0
+            and user["role"] == "ADMIN"
+            and user["is_active"]
+        ):
+            active_admins = conn.execute(
+                "SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN' AND is_active = 1"
+            ).fetchone()["total"]
+            if active_admins <= 1:
+                conn.rollback()
+                return "last_admin"
+        conn.execute(
+            "UPDATE users SET is_active = ? WHERE id = ?", (is_active, user_id)
+        )
+        conn.commit()
+        return "updated"
     finally:
         conn.close()
 
@@ -282,8 +549,8 @@ def create_user(name, email, password):
     try:
         cursor = conn.execute(
             """
-            INSERT INTO users (name, email, password_hash, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO users (name, email, password_hash, created_at, role, is_active)
+            VALUES (?, ?, ?, ?, 'STUDENT', 1)
             """,
             (name, email.lower().strip(), password_hash,
              datetime.now().isoformat(timespec="seconds")),
@@ -297,20 +564,77 @@ def create_user(name, email, password):
         conn.close()
 
 
+def create_first_admin(name, email, password):
+    """Create an Admin only when no Admin exists; intended for the CLI only."""
+    password_hash = generate_password_hash(password)
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        existing_admin = conn.execute(
+            "SELECT 1 FROM users WHERE role = 'ADMIN' LIMIT 1"
+        ).fetchone()
+        if existing_admin:
+            conn.rollback()
+            return "admin_exists"
+        try:
+            conn.execute(
+                """
+                INSERT INTO users (name, email, password_hash, created_at, role, is_active)
+                VALUES (?, ?, ?, ?, 'ADMIN', 1)
+                """,
+                (
+                    name,
+                    email.lower().strip(),
+                    password_hash,
+                    datetime.now().isoformat(timespec="seconds"),
+                ),
+            )
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return "email_exists"
+        conn.commit()
+        return "created"
+    finally:
+        conn.close()
+
+
+def has_admin_account():
+    conn = get_connection()
+    try:
+        return conn.execute(
+            "SELECT 1 FROM users WHERE role = 'ADMIN' LIMIT 1"
+        ).fetchone() is not None
+    finally:
+        conn.close()
+
+
 def get_user_by_email(email):
-    """Return a safe user dict (id, name, email) or None.  Never exposes
-    the password hash."""
+    """Return safe account fields, never the password hash."""
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, name, email FROM users WHERE email = ?",
+            "SELECT id, name, email, role, is_active FROM users WHERE email = ?",
             (email.lower().strip(),),
         ).fetchone()
     finally:
         conn.close()
-    if row is None:
+    if row is None or row["role"] not in ROLES:
         return None
-    return {"id": row["id"], "name": row["name"], "email": row["email"]}
+    return dict(row)
+
+
+def get_user_by_id(user_id):
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, name, email, role, is_active FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None or row["role"] not in ROLES:
+        return None
+    return dict(row)
 
 
 def verify_user(email, password):
@@ -319,13 +643,26 @@ def verify_user(email, password):
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+            """
+            SELECT id, name, email, password_hash, role, is_active
+            FROM users WHERE email = ?
+            """,
             (email.lower().strip(),),
         ).fetchone()
     finally:
         conn.close()
-    if row is None:
+    if (
+        row is None
+        or row["role"] not in ROLES
+        or not row["is_active"]
+    ):
         return None
     if not check_password_hash(row["password_hash"], password):
         return None
-    return {"id": row["id"], "name": row["name"], "email": row["email"]}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "email": row["email"],
+        "role": row["role"],
+        "is_active": row["is_active"],
+    }
