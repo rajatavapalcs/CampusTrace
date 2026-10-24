@@ -6,12 +6,12 @@
   <title>{% block title %}CampusTrace{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,500;8..60,650;8..60,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
   <header class="site-header">
-    <p class="campus-bar">Campus Lost &amp; Found Desk</p>
+    <p class="masthead-kicker">College Lost &amp; Found Desk</p>
     <div class="container header-inner">
       <a class="brand" href="{{ url_for('home') }}">
         <span class="brand-mark" aria-hidden="true">CT</span>
@@ -26,7 +26,16 @@
         <a href="{{ url_for('report_lost') }}" {% if request.endpoint == 'report_lost' %}class="is-active"{% endif %}>Report Lost</a>
         <a href="{{ url_for('report_found') }}" {% if request.endpoint == 'report_found' %}class="is-active"{% endif %}>Report Found</a>
         <a href="{{ url_for('search') }}" {% if request.endpoint == 'search' %}class="is-active"{% endif %}>Search</a>
-        <a href="{{ url_for('my_reports') }}" {% if request.endpoint == 'my_reports' %}class="is-active"{% endif %}>My Reports</a>
+        {% if current_user %}
+          <a href="{{ url_for('my_reports') }}" {% if request.endpoint == 'my_reports' %}class="is-active"{% endif %}>My Reports</a>
+          <span class="nav-divider"></span>
+          <span class="nav-user">{{ current_user.name }}</span>
+          <a href="{{ url_for('logout') }}" class="nav-auth">Log out</a>
+        {% else %}
+          <span class="nav-divider"></span>
+          <a href="{{ url_for('login') }}" class="nav-auth {% if request.endpoint == 'login' %}is-active{% endif %}">Log in</a>
+          <a href="{{ url_for('register') }}" class="nav-auth nav-register {% if request.endpoint == 'register' %}is-active{% endif %}">Register</a>
+        {% endif %}
       </nav>
     </div>
   </header>
@@ -47,7 +56,7 @@
 
   <footer class="site-footer">
     <div class="container">
-      <p class="footer-name">CampusTrace</p>
+      <p>CampusTrace &middot; campus lost &amp; found</p>
       <p class="muted">Match percentages show similarity between reports, not proof of ownership.</p>
     </div>
   </footer>

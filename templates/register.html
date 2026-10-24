@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Register &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card form-card auth-card">
+  <h1>Create an Account</h1>
+  <p class="muted">Register to report lost or found items on campus.</p>
+
+  <form method="post" novalidate data-validate>
+    <div class="field">
+      <label for="name">Full Name <span class="req">*</span></label>
+      <input type="text" id="name" name="name" required maxlength="120"
+             placeholder="Your full name" autocomplete="name"
+             value="{{ form_name or '' }}" />
+    </div>
+
+    <div class="field">
+      <label for="email">Email <span class="req">*</span></label>
+      <input type="email" id="email" name="email" required maxlength="200"
+             placeholder="you@college.edu" autocomplete="email"
+             value="{{ form_email or '' }}" />
+    </div>
+
+    <div class="field">
+      <label for="password">Password <span class="req">*</span></label>
+      <input type="password" id="password" name="password" required
+             minlength="8" placeholder="At least 8 characters"
+             autocomplete="new-password" />
+      <p class="help">Must be at least 8 characters.</p>
+    </div>
+
+    <div class="field">
+      <label for="confirm_password">Confirm Password <span class="req">*</span></label>
+      <input type="password" id="confirm_password" name="confirm_password" required
+             placeholder="Re-enter your password" autocomplete="new-password" />
+    </div>
+
+    <button class="btn btn-primary btn-block" type="submit">Create Account</button>
+  </form>
+
+  <p class="auth-link">Already have an account? <a href="{{ url_for('login') }}">Log in here</a></p>
+</section>
+{% endblock %}

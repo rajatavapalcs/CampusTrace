@@ -8,6 +8,8 @@ import os
 import sqlite3
 from datetime import datetime
 
+from werkzeug.security import check_password_hash, generate_password_hash
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
@@ -263,3 +265,67 @@ def seed_sample_data():
             }
         )
     return len(SAMPLE_ITEMS)
+
+
+# ---------------------------------------------------------------------------
+#  User authentication helpers
+# ---------------------------------------------------------------------------
+
+def create_user(name, email, password):
+    """Create a new user with a hashed password.
+
+    Returns the new user's id on success, or None if the email is already
+    registered.  The password is never stored in plain text.
+    """
+    password_hash = generate_password_hash(password)
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO users (name, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (name, email.lower().strip(), password_hash,
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        # UNIQUE constraint on email
+        return None
+    finally:
+        conn.close()
+
+
+def get_user_by_email(email):
+    """Return a safe user dict (id, name, email) or None.  Never exposes
+    the password hash."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, name, email FROM users WHERE email = ?",
+            (email.lower().strip(),),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    return {"id": row["id"], "name": row["name"], "email": row["email"]}
+
+
+def verify_user(email, password):
+    """Check credentials.  Returns a safe user dict on success, None on
+    failure.  The hash never leaves this function."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+            (email.lower().strip(),),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    if not check_password_hash(row["password_hash"], password):
+        return None
+    return {"id": row["id"], "name": row["name"], "email": row["email"]}

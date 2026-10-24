@@ -48,7 +48,7 @@
 <section>
   <h2>{{ results | length }} result{{ '' if results | length == 1 else 's' }}</h2>
   {% if results %}
-    <div class="card-grid">
+    <div class="card-grid notice-list">
       {% for item in results %}
         <article class="card item-card">
           <div class="card-top">

@@ -14,7 +14,7 @@
   <section class="matches">
     <h2>Reported Lost Items That Match</h2>
     {% if matches %}
-      <div class="card-grid">
+      <div class="card-grid notice-list">
         {% for m in matches %}
           <article class="card match-card">
             <h3>{{ m.item_name }}</h3>
