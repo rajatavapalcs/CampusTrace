@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS items (
     secret_hint TEXT NOT NULL,
     secret_answer TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    is_hidden INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0, 1))
+    is_hidden INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0, 1)),
+    owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -31,6 +32,8 @@ CREATE TABLE IF NOT EXISTS claims (
         status IN ('PENDING', 'VERIFIED', 'DISPUTED', 'APPROVED', 'REJECTED', 'RESOLVED')
     ),
     reason TEXT,
+    evidence TEXT,
+    linked_lost_item_id INTEGER REFERENCES items(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL,
     reviewed_by INTEGER REFERENCES users(id),
     reviewed_at TEXT

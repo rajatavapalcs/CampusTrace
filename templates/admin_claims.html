@@ -4,7 +4,7 @@
 {% block content %}
 <section class="card">
   <h1>Review Claims</h1>
-  <p class="muted">Answers are never stored or shown here. Review requests contain only the claimant's reason and verification outcome.</p>
+  <p class="muted">Review the claimant's private evidence. Lost-report answers are checked before submission and are never stored or shown here.</p>
 
   {% if claims %}
     <div class="table-wrap">
@@ -14,7 +14,8 @@
             <th>Claimant</th>
             <th>Item</th>
             <th>Status</th>
-            <th>Review reason</th>
+            <th>Evidence</th>
+            <th>Linked lost report</th>
             <th>Submitted</th>
             <th>Actions</th>
           </tr>
@@ -25,7 +26,8 @@
               <td>{{ claim.claimant_name }}<br /><span class="muted small">{{ claim.claimant_email }}</span></td>
               <td>{{ claim.item_name }}<br /><span class="muted small">{{ claim.item_status }}</span></td>
               <td>{{ claim.status }}</td>
-              <td>{{ claim.reason or 'Verified answer' }}</td>
+              <td>{{ claim.evidence or claim.reason or 'No evidence recorded (legacy claim)' }}</td>
+              <td>{{ claim.linked_lost_item_name or 'Not linked' }}</td>
               <td>{{ claim.created_at }}</td>
               <td>
                 <div class="admin-actions">
@@ -33,7 +35,7 @@
                     <form method="post" action="{{ url_for('admin_review_claim', claim_id=claim.id) }}">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                       <input type="hidden" name="decision" value="APPROVED" />
-                      <button class="btn btn-success" type="submit">Approve &amp; resolve</button>
+                      <button class="btn btn-success" type="submit">Approve claim</button>
                     </form>
                     <form method="post" action="{{ url_for('admin_review_claim', claim_id=claim.id) }}">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

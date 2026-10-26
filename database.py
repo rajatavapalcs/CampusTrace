@@ -73,6 +73,11 @@ def init_db():
             },
             "items": {
                 "is_hidden": "INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0, 1))",
+                "owner_id": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            },
+            "claims": {
+                "evidence": "TEXT",
+                "linked_lost_item_id": "INTEGER REFERENCES items(id) ON DELETE SET NULL",
             },
         }
         for table, columns in migrations.items():
@@ -86,6 +91,12 @@ def init_db():
                         "ALTER TABLE %s ADD COLUMN %s %s"
                         % (table, column, definition)
                     )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_owner_status ON items(owner_id, status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_claims_user_status ON claims(user_id, status)"
+        )
         conn.commit()
     finally:
         conn.close()
@@ -97,15 +108,16 @@ def tracking_id(item_id, status):
     return "CT-%s-%06d" % (letter, item_id)
 
 
-def insert_item(data):
+def insert_item(data, owner_id=None):
     conn = get_connection()
     try:
         cursor = conn.execute(
             """
             INSERT INTO items (
                 item_name, category, status, location, item_date,
-                description, contact, secret_hint, secret_answer, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                description, contact, secret_hint, secret_answer, created_at,
+                owner_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["item_name"],
@@ -118,6 +130,7 @@ def insert_item(data):
                 data["secret_hint"],
                 data["secret_answer"],
                 datetime.now().isoformat(timespec="seconds"),
+                owner_id,
             ),
         )
         conn.commit()
@@ -127,14 +140,56 @@ def insert_item(data):
 
 
 def get_item(item_id):
-    """Return public fields plus the secret question (never the answer)."""
+    """Return only public fields for a report."""
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT %s, secret_hint FROM items WHERE id = ? AND is_hidden = 0"
+            "SELECT %s FROM items WHERE id = ? AND is_hidden = 0"
             % PUBLIC_COLUMNS,
             (item_id,),
         ).fetchone()
+    finally:
+        conn.close()
+
+
+def get_item_owner_id(item_id):
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT owner_id FROM items WHERE id = ?", (item_id,)
+        ).fetchone()
+        return row["owner_id"] if row else None
+    finally:
+        conn.close()
+
+
+def get_user_items(user_id):
+    conn = get_connection()
+    try:
+        return conn.execute(
+            """
+            SELECT %s FROM items
+            WHERE owner_id = ? AND is_hidden = 0
+            ORDER BY id DESC
+            """ % PUBLIC_COLUMNS,
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_user_lost_items(user_id):
+    conn = get_connection()
+    try:
+        return conn.execute(
+            """
+            SELECT id, item_name, category, location, item_date
+            FROM items
+            WHERE owner_id = ? AND status = 'LOST' AND is_hidden = 0
+            ORDER BY id DESC
+            """,
+            (user_id,),
+        ).fetchall()
     finally:
         conn.close()
 
@@ -144,7 +199,14 @@ def get_admin_reports():
     conn = get_connection()
     try:
         return conn.execute(
-            "SELECT %s, is_hidden FROM items ORDER BY id DESC" % PUBLIC_COLUMNS,
+            """
+            SELECT %s, is_hidden,
+                   EXISTS (
+                       SELECT 1 FROM claims
+                       WHERE claims.item_id = items.id AND claims.status = 'APPROVED'
+                   ) AS has_approved_claim
+            FROM items ORDER BY id DESC
+            """ % PUBLIC_COLUMNS,
         ).fetchall()
     finally:
         conn.close()
@@ -226,49 +288,44 @@ def get_stats():
         conn.close()
 
 
-def check_secret_answer(item_id, submitted_answer):
-    """Compare answers server-side only, ignoring case and outer whitespace."""
+def check_owned_lost_answer(user_id, item_id, submitted_answer):
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT secret_answer FROM items WHERE id = ?", (item_id,)
+            """
+            SELECT secret_answer FROM items
+            WHERE id = ? AND owner_id = ? AND status = 'LOST' AND is_hidden = 0
+            """,
+            (item_id, user_id),
         ).fetchone()
     finally:
         conn.close()
-    if row is None:
+    if row is None or not row["secret_answer"]:
         return False
     return row["secret_answer"].strip().lower() == (submitted_answer or "").strip().lower()
-
-
-def mark_resolved(item_id):
-    conn = get_connection()
-    try:
-        conn.execute("UPDATE items SET status = 'RESOLVED' WHERE id = ?", (item_id,))
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def mark_claim_resolved(claim_id, user_id):
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            UPDATE claims SET status = 'RESOLVED'
-            WHERE id = ? AND user_id = ? AND status = 'VERIFIED'
-            """,
-            (claim_id, user_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def admin_set_item_resolved(item_id):
     conn = get_connection()
     try:
+        conn.execute("BEGIN IMMEDIATE")
+        approved_claim = conn.execute(
+            """
+            SELECT 1 FROM claims
+            WHERE item_id = ? AND status = 'APPROVED'
+            LIMIT 1
+            """,
+            (item_id,),
+        ).fetchone()
+        if approved_claim is None:
+            conn.rollback()
+            return False
         cursor = conn.execute(
-            "UPDATE items SET status = 'RESOLVED' WHERE id = ?", (item_id,)
+            """
+            UPDATE items SET status = 'RESOLVED'
+            WHERE id = ? AND status = 'FOUND' AND is_hidden = 0
+            """,
+            (item_id,),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -296,31 +353,65 @@ def moderate_item(item_id, action):
         conn.close()
 
 
-def create_verified_claim(user_id, item_id):
+def create_student_claim(user_id, item_id, evidence, linked_lost_item_id=None):
+    """Create a pending claim for a visible found report."""
     conn = get_connection()
     try:
+        conn.execute("BEGIN IMMEDIATE")
+        found_item = conn.execute(
+            """
+            SELECT id, status, is_hidden, owner_id
+            FROM items WHERE id = ?
+            """,
+            (item_id,),
+        ).fetchone()
+        if (
+            found_item is None
+            or found_item["status"] != "FOUND"
+            or found_item["is_hidden"]
+        ):
+            conn.rollback()
+            return "item_unavailable"
+        if found_item["owner_id"] == user_id:
+            conn.rollback()
+            return "own_report"
+
+        if linked_lost_item_id is not None:
+            owned_lost = conn.execute(
+                """
+                SELECT id FROM items
+                WHERE id = ? AND owner_id = ? AND status = 'LOST' AND is_hidden = 0
+                """,
+                (linked_lost_item_id, user_id),
+            ).fetchone()
+            if owned_lost is None:
+                conn.rollback()
+                return "invalid_lost_report"
+
+        pending_claim = conn.execute(
+            """
+            SELECT id FROM claims
+            WHERE item_id = ? AND user_id = ? AND status IN ('PENDING', 'DISPUTED')
+            """,
+            (item_id, user_id),
+        ).fetchone()
+        if pending_claim:
+            conn.rollback()
+            return "already_pending"
+
         cursor = conn.execute(
             """
-            INSERT INTO claims (item_id, user_id, status, created_at)
-            VALUES (?, ?, 'VERIFIED', ?)
+            INSERT INTO claims (
+                item_id, user_id, status, evidence, linked_lost_item_id, created_at
+            ) VALUES (?, ?, 'PENDING', ?, ?, ?)
             """,
-            (item_id, user_id, datetime.now().isoformat(timespec="seconds")),
-        )
-        conn.commit()
-        return cursor.lastrowid
-    finally:
-        conn.close()
-
-
-def create_claim_review(user_id, item_id, reason):
-    conn = get_connection()
-    try:
-        cursor = conn.execute(
-            """
-            INSERT INTO claims (item_id, user_id, status, reason, created_at)
-            VALUES (?, ?, 'PENDING', ?, ?)
-            """,
-            (item_id, user_id, reason, datetime.now().isoformat(timespec="seconds")),
+            (
+                item_id,
+                user_id,
+                evidence,
+                linked_lost_item_id,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
         )
         conn.commit()
         return cursor.lastrowid
@@ -334,16 +425,38 @@ def get_admin_claims():
         return conn.execute(
             """
             SELECT claims.id, claims.item_id, claims.user_id, claims.status,
-                   claims.reason, claims.created_at, claims.reviewed_at,
+                   claims.reason, claims.evidence, claims.linked_lost_item_id,
+                   claims.created_at, claims.reviewed_at,
                    users.name AS claimant_name, users.email AS claimant_email,
-                   items.item_name, items.status AS item_status
+                   items.item_name, items.status AS item_status,
+                   lost_items.item_name AS linked_lost_item_name
             FROM claims
             JOIN users ON users.id = claims.user_id
             JOIN items ON items.id = claims.item_id
+            LEFT JOIN items AS lost_items ON lost_items.id = claims.linked_lost_item_id
             ORDER BY CASE claims.status
-                WHEN 'PENDING' THEN 0 WHEN 'DISPUTED' THEN 1 ELSE 2 END,
+                WHEN 'PENDING' THEN 0 WHEN 'DISPUTED' THEN 1
+                WHEN 'APPROVED' THEN 2 WHEN 'REJECTED' THEN 3 ELSE 4 END,
                 claims.id DESC
             """
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_user_claims(user_id):
+    conn = get_connection()
+    try:
+        return conn.execute(
+            """
+            SELECT claims.id, claims.item_id, claims.status, claims.evidence,
+                   claims.created_at, claims.reviewed_at, items.item_name
+            FROM claims
+            JOIN items ON items.id = claims.item_id
+            WHERE claims.user_id = ?
+            ORDER BY claims.id DESC
+            """,
+            (user_id,),
         ).fetchall()
     finally:
         conn.close()
@@ -356,10 +469,21 @@ def review_claim(claim_id, admin_id, decision):
     try:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT item_id FROM claims WHERE id = ? AND status IN ('PENDING', 'DISPUTED')",
+            """
+            SELECT claims.item_id, items.status AS item_status, items.is_hidden
+            FROM claims
+            JOIN items ON items.id = claims.item_id
+            WHERE claims.id = ? AND claims.status IN ('PENDING', 'DISPUTED')
+            """,
             (claim_id,),
         ).fetchone()
         if row is None:
+            conn.rollback()
+            return False
+        if (
+            decision == "APPROVED"
+            and (row["item_status"] != "FOUND" or row["is_hidden"])
+        ):
             conn.rollback()
             return False
         conn.execute(
@@ -375,10 +499,6 @@ def review_claim(claim_id, admin_id, decision):
                 claim_id,
             ),
         )
-        if decision == "APPROVED":
-            conn.execute(
-                "UPDATE items SET status = 'RESOLVED' WHERE id = ?", (row["item_id"],)
-            )
         conn.commit()
         return True
     finally:

@@ -24,20 +24,22 @@
 
   <p class="help">Contact details and the verification answer are kept private on the server.</p>
 
-  {% if item.status != 'RESOLVED' %}
-    {% if current_user %}
+  {% if item.status == 'FOUND' %}
+    {% if can_claim %}
       <a class="btn btn-primary" href="{{ url_for('claim', item_id=item.id) }}">Claim This Item</a>
-    {% else %}
+    {% elif not current_user %}
       <a class="btn btn-primary" href="{{ url_for('login', next=url_for('claim', item_id=item.id)) }}">Log in to claim</a>
+    {% elif current_user.role == 'STUDENT' %}
+      <p class="muted">You cannot submit a claim for a found report you posted.</p>
     {% endif %}
-  {% else %}
+  {% elif item.status == 'RESOLVED' %}
     <p class="notice notice-good">This item has been returned and marked RESOLVED.</p>
   {% endif %}
 </section>
 
 {% if matches is not none %}
 <section class="matches">
-  <h2>Reported Lost Items That Match</h2>
+  <h2>Reported {{ 'Lost' if match_status == 'LOST' else 'Found' }} Items That Match</h2>
   {% if matches %}
     <div class="card-grid notice-list">
       {% for m in matches %}

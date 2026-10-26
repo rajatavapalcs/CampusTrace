@@ -47,10 +47,10 @@
                       <button class="btn btn-ghost" type="submit">Hide</button>
                     </form>
                   {% endif %}
-                  {% if item.status != 'RESOLVED' %}
+                  {% if item.status == 'FOUND' and item.has_approved_claim %}
                     <form method="post" action="{{ url_for('admin_resolve_report', item_id=item.id) }}">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                      <button class="btn btn-success" type="submit">Mark resolved</button>
+                      <button class="btn btn-success" type="submit">Mark returned</button>
                     </form>
                   {% endif %}
                   <form method="post" action="{{ url_for('admin_moderate_report', item_id=item.id) }}"

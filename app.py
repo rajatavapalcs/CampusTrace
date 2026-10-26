@@ -5,6 +5,7 @@ import getpass
 import os
 import re
 import secrets
+from datetime import datetime
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -34,8 +35,7 @@ REQUIRED_FIELDS = {
     "category": "Category",
     "location": "Location",
     "item_date": "Date",
-    "secret_hint": "Secret verification question",
-    "secret_answer": "Secret verification answer",
+    "description": "Description",
 }
 
 # Simple email regex for server-side validation
@@ -44,7 +44,6 @@ AUTHENTICATED_POST_ENDPOINTS = {
     "report_lost",
     "report_found",
     "claim",
-    "request_claim_review",
     "dispute_own_claim",
     "resolve",
     "admin_moderate_report",
@@ -178,16 +177,46 @@ def read_form(status):
         "item_date": (request.form.get("item_date") or "").strip(),
         "description": (request.form.get("description") or "").strip(),
         "contact": (request.form.get("contact") or "").strip(),
-        "secret_hint": (request.form.get("secret_hint") or "").strip(),
-        "secret_answer": (request.form.get("secret_answer") or "").strip(),
+        "secret_hint": (
+            (request.form.get("secret_hint") or "").strip()
+            if status == "LOST"
+            else ""
+        ),
+        "secret_answer": (
+            (request.form.get("secret_answer") or "").strip()
+            if status == "LOST"
+            else ""
+        ),
         "status": status,
     }
 
-    errors = [label for field, label in REQUIRED_FIELDS.items() if not data[field]]
+    fields = dict(REQUIRED_FIELDS)
+    if status == "LOST":
+        fields.update(
+            {
+                "secret_hint": "Secret verification question",
+                "secret_answer": "Secret verification answer",
+            }
+        )
+    errors = [label for field, label in fields.items() if not data[field]]
+    limits = {
+        "item_name": 120,
+        "description": 1000,
+        "contact": 200,
+        "secret_hint": 160,
+        "secret_answer": 120,
+    }
+    for field, maximum in limits.items():
+        if len(data[field]) > maximum:
+            errors.append("%s must be %d characters or fewer." % (field.replace("_", " ").title(), maximum))
     if data["category"] and data["category"] not in db.CATEGORIES:
         errors.append("Category")
     if data["location"] and data["location"] not in db.LOCATIONS:
         errors.append("Location")
+    try:
+        datetime.strptime(data["item_date"], "%Y-%m-%d")
+    except ValueError:
+        errors.append("Date must be a valid calendar date.")
     return data, errors
 
 
@@ -366,12 +395,20 @@ def item_details(item_id):
     if item is None:
         abort(404)
     matches = None
-    if item["status"] == "FOUND":
-        matches = find_matches(item, db.get_items_by_status("LOST"))
+    match_status = {"FOUND": "LOST", "LOST": "FOUND"}.get(item["status"])
+    if match_status:
+        matches = find_matches(item, db.get_items_by_status(match_status))
     return render_template(
         "item_details.html",
         item=item,
         matches=matches,
+        match_status=match_status,
+        can_claim=(
+            g.current_user is not None
+            and g.current_user["role"] == "STUDENT"
+            and item["status"] == "FOUND"
+            and db.get_item_owner_id(item_id) != g.current_user["id"]
+        ),
         just_reported=request.args.get("reported") == "1",
         tracking_id=db.tracking_id(item["id"], item["status"]),
         **common_context()
@@ -392,7 +429,7 @@ def report_lost():
             return render_template(
                 "report_lost.html", form=data, **common_context()
             ), 400
-        item_id = db.insert_item(data)
+        item_id = db.insert_item(data, g.current_user["id"])
         remember_report(item_id)
         flash("Lost item reported successfully.", "success")
         return redirect(url_for("item_details", item_id=item_id, reported=1))
@@ -410,7 +447,7 @@ def report_found():
                 "report_found.html", form=data, matches=None, **common_context()
             ), 400
 
-        item_id = db.insert_item(data)
+        item_id = db.insert_item(data, g.current_user["id"])
         remember_report(item_id)
         found_item = db.get_item(item_id)
         matches = find_matches(found_item, db.get_items_by_status("LOST"))
@@ -432,51 +469,75 @@ def report_found():
 @app.route("/item/<int:item_id>/claim", methods=["GET", "POST"])
 @login_required
 def claim(item_id):
+    if g.current_user["role"] != "STUDENT":
+        abort(403)
     item = db.get_item(item_id)
-    if item is None:
+    if item is None or item["status"] != "FOUND":
         abort(404)
 
-    verified = False
+    if db.get_item_owner_id(item_id) == g.current_user["id"]:
+        abort(403)
+
+    lost_reports = db.get_user_lost_items(g.current_user["id"])
     if request.method == "POST":
-        answer = request.form.get("answer") or ""
-        if db.check_secret_answer(item_id, answer):
-            claim_id = db.create_verified_claim(g.current_user["id"], item_id)
-            verified = True
-            session["verified_%d" % item_id] = True
-            session["claim_id_%d" % item_id] = claim_id
-            session.pop("claim_failed_%d" % item_id, None)
-            flash("Verification Successful.", "success")
-        else:
-            session["claim_failed_%d" % item_id] = True
-            flash("The verification answer does not match.", "error")
+        evidence = (request.form.get("evidence") or "").strip()
+        linked_lost_id_raw = (request.form.get("linked_lost_item_id") or "").strip()
+        answer = (request.form.get("lost_answer") or "").strip()
+        errors = []
+        linked_lost_id = None
+        if not evidence or len(evidence) > 1200:
+            errors.append("Evidence must be between 1 and 1200 characters.")
+        if linked_lost_id_raw:
+            try:
+                linked_lost_id = int(linked_lost_id_raw)
+            except ValueError:
+                errors.append("Select a valid lost report.")
+            if linked_lost_id is not None and not answer:
+                errors.append("Enter the answer for your selected lost report.")
+            elif linked_lost_id is not None and not db.check_owned_lost_answer(
+                g.current_user["id"], linked_lost_id, answer
+            ):
+                errors.append("The lost report or its verification answer is invalid.")
+        elif answer:
+            errors.append("Select your lost report before entering its verification answer.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return render_template(
+                "claim.html",
+                item=item,
+                lost_reports=lost_reports,
+                form_evidence=evidence,
+                selected_lost_report=linked_lost_id_raw,
+                tracking_id=db.tracking_id(item["id"], item["status"]),
+                **common_context()
+            ), 400
+
+        result = db.create_student_claim(
+            g.current_user["id"], item_id, evidence, linked_lost_id
+        )
+        if isinstance(result, int):
+            flash("Claim submitted. It is pending Admin review.", "success")
+            return redirect(url_for("my_claims"))
+        messages = {
+            "item_unavailable": "This found item is no longer available for claims.",
+            "own_report": "You cannot claim a found report you submitted.",
+            "invalid_lost_report": "Select one of your own active lost reports.",
+            "already_pending": "You already have a pending claim for this item.",
+        }
+        flash(messages.get(result, "The claim could not be submitted."), "error")
+        return redirect(url_for("claim", item_id=item_id))
 
     return render_template(
         "claim.html",
         item=item,
-        verified=verified or session.get("verified_%d" % item_id, False),
-        claim_id=session.get("claim_id_%d" % item_id),
-        claim_failed=session.get("claim_failed_%d" % item_id, False),
+        lost_reports=lost_reports,
+        form_evidence="",
+        selected_lost_report="",
         tracking_id=db.tracking_id(item["id"], item["status"]),
         **common_context()
     )
-
-
-@app.route("/item/<int:item_id>/claim/review", methods=["POST"])
-@login_required
-def request_claim_review(item_id):
-    if not session.get("claim_failed_%d" % item_id, False):
-        abort(403)
-    item = db.get_item(item_id)
-    if item is None:
-        abort(404)
-    reason = (request.form.get("reason") or "").strip()
-    if not reason or len(reason) > 500:
-        flash("Please provide a reason of 1 to 500 characters.", "error")
-        return redirect(url_for("claim", item_id=item_id))
-    db.create_claim_review(g.current_user["id"], item_id, reason)
-    session.pop("claim_failed_%d" % item_id, None)
-    flash("Your request has been sent to campus staff for review.", "success")
-    return redirect(url_for("claim", item_id=item_id))
 
 
 @app.route("/claims/<int:claim_id>/dispute", methods=["POST"])
@@ -492,31 +553,34 @@ def dispute_own_claim(claim_id):
 @app.route("/item/<int:item_id>/resolve", methods=["POST"])
 @login_required
 def resolve(item_id):
-    item = db.get_item(item_id)
-    if item is None:
-        abort(404)
-    if not session.get("verified_%d" % item_id, False):
-        flash("Please verify ownership before resolving this item.", "error")
-        return redirect(url_for("claim", item_id=item_id))
-    db.mark_resolved(item_id)
-    claim_id = session.get("claim_id_%d" % item_id)
-    if claim_id:
-        db.mark_claim_resolved(claim_id, g.current_user["id"])
-    remember_report(item_id)
-    flash("Item marked as RESOLVED.", "success")
-    return redirect(url_for("item_details", item_id=item_id))
+    abort(403, description="Only an Admin can resolve a report after reviewing its claim.")
 
 
 @app.route("/my-reports")
 @login_required
 def my_reports():
-    items = db.get_items_by_ids(session.get("my_items", []))
+    items_by_id = {
+        item["id"]: item
+        for item in db.get_items_by_ids(session.get("my_items", []))
+    }
+    items_by_id.update(
+        {item["id"]: item for item in db.get_user_items(g.current_user["id"])}
+    )
+    items = sorted(items_by_id.values(), key=lambda item: item["id"], reverse=True)
     return render_template(
         "my_reports.html",
         items=items,
         tracking_id=db.tracking_id,
         **common_context()
     )
+
+
+@app.route("/my-claims")
+@login_required
+def my_claims():
+    if g.current_user["role"] != "STUDENT":
+        abort(403)
+    return render_template("my_claims.html", claims=db.get_user_claims(g.current_user["id"]))
 
 
 # ---------------------------------------------------------------------------
@@ -582,7 +646,7 @@ def admin_review_claim(claim_id):
     if not db.review_claim(claim_id, g.current_user["id"], decision):
         abort(404)
     flash(
-        "Claim approved and item resolved."
+        "Claim approved. An Admin may now mark the item returned."
         if decision == "APPROVED"
         else "Claim rejected.",
         "success",

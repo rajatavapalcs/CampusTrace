@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}My Claims &middot; CampusTrace{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>My Claims</h1>
+  <p class="muted">Track claim decisions. Items are marked returned only after an Admin approves the claim.</p>
+
+  {% if claims %}
+    <div class="table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Status</th>
+            <th>Evidence submitted</th>
+            <th>Submitted</th>
+            <th>Reviewed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for claim in claims %}
+            <tr>
+              <td>{{ claim.item_name }}</td>
+              <td>
+                {% if claim.status == 'PENDING' %}
+                  Pending Admin review
+                {% elif claim.status == 'APPROVED' %}
+                  Approved
+                {% elif claim.status == 'REJECTED' %}
+                  Rejected
+                {% elif claim.status == 'DISPUTED' %}
+                  Flagged for review
+                {% else %}
+                  {{ claim.status | title }}
+                {% endif %}
+              </td>
+              <td>{{ claim.evidence }}</td>
+              <td>{{ claim.created_at }}</td>
+              <td>{{ claim.reviewed_at or 'Not reviewed' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">You haven't submitted any claims.</p>
+    <a class="btn btn-ghost" href="{{ url_for('search', status='FOUND') }}">Search found items</a>
+  {% endif %}
+</section>
+{% endblock %}

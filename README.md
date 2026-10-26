@@ -46,11 +46,20 @@ moderation, claim review, account suspension/reactivation, and statistics.
 
 Admins can hide and restore reports or permanently delete a report and its
 associated claim records. Hidden reports are omitted from public search,
-matches, details, and public statistics. Claim answers are checked in the
-existing verification flow and are never stored in claim records. A Student
-can request staff review after a failed verification or flag their own
-verified claim; an Admin can approve/reject pending or disputed claims, flag
-verified claims, and mark reports resolved.
+matches, details, and public statistics. Only lost-item reports ask for a
+private verification question and answer; found-item reporters do not provide
+the lost owner's verification data. New reports are associated with their
+authenticated reporter, while old reports keep an unknown owner rather than
+being assigned incorrectly.
+
+Students submit a private written evidence description to claim a found item.
+They may link one of their own active lost reports; if linked, its answer is
+verified server-side and is not stored with the claim or shown to reviewers.
+Claims remain Pending until an Admin approves or rejects them. Only an
+approved claim can be marked returned by an Admin. Students can track their
+claim statuses at `/my-claims`; they cannot resolve reports directly. Matches
+are shown from either the lost or found report using the existing scoring
+system.
 
 Both roles use the existing shared login page. By default, successful Student
 login redirects to the public/student homepage, while successful Admin login
@@ -93,12 +102,13 @@ CampusTrace/
 | GET/POST | `/report/found` | Report a found item, then show matching lost reports |
 | GET | `/search` | Search with category, location and status filters |
 | GET | `/item/<id>` | Item details + tracking ID |
-| GET/POST | `/item/<id>/claim` | Show the secret question, verify the answer server-side |
-| POST | `/item/<id>/resolve` | Mark an item RESOLVED (only after verification) |
-| GET | `/my-reports` | Items reported from this browser |
+| GET/POST | `/item/<id>/claim` | Submit private evidence for an Admin-reviewed found-item claim |
+| POST | `/item/<id>/resolve` | Student resolution is forbidden; Admin resolution requires an approved claim |
+| GET | `/my-reports` | Items owned by the signed-in student, plus legacy browser reports |
+| GET | `/my-claims` | Claim status tracking for the signed-in student |
 | GET | `/admin` | Admin dashboard and aggregate statistics |
 | GET | `/admin/reports` | Review, hide, restore, resolve, or delete reports |
-| GET | `/admin/claims` | Review pending, disputed, and verified claims |
+| GET | `/admin/claims` | Review pending, disputed, approved, and rejected claims |
 | GET | `/admin/users` | Suspend or reactivate accounts |
 
 - `PUSH_TO_GITHUB.md` — step-by-step guide to upload this project to GitHub
@@ -124,12 +134,15 @@ that the item belongs to anyone.
 
 Public: item name, match percentage, category, location, date, description, status.
 
-Private (server-side only): contact details, secret verification question answer.
+Private: contact details; lost-report verification questions and answers; and
+claim evidence. Claim answers are only compared server-side when the claimant
+links a lost report they own. Admin claim review can access the written claim
+evidence but not the private question or answer.
 
-The secret answer is never rendered into HTML, never sent to JavaScript, and never
-exposed through a URL or API. `database.py` selects a fixed list of public columns,
-and the answer is compared only inside `check_secret_answer()` (case-insensitive,
-whitespace-trimmed).
+The secret question and answer are never rendered on public pages, sent to
+JavaScript, exposed through a URL, or included in Admin query results.
+`database.py` selects a fixed list of public columns, and the answer comparison
+uses an owner-scoped query without returning the answer to Flask templates.
 
 ## Demo scenario
 
@@ -137,6 +150,6 @@ whitespace-trimmed).
    secret question "What colour sticker is on the back?", answer "Red".
 2. Report found: *Casio Scientific Calculator*, Electronics, Physics Lab, 24 Sep 2026.
 3. The found page lists **Reported Lost Items That Match** with a high match percentage.
-4. Open **View Details** → **Claim This Item**.
-5. Answer the verification question → *Verification Successful*.
-6. Mark as **RESOLVED**; the home page statistics update.
+4. Sign in as the student who reported the lost calculator, open the found item's details, and choose **Claim This Item**.
+5. Submit private ownership evidence. Optionally link the lost report and enter its verification answer; it is checked privately and never saved.
+6. An Admin reviews the evidence and approves the claim, then separately marks the item returned. The home page statistics update.

@@ -38,6 +38,7 @@
           <a href="{{ url_for('report_lost') }}" {% if request.endpoint == 'report_lost' %}class="is-active"{% endif %}>Report Lost</a>
           <a href="{{ url_for('report_found') }}" {% if request.endpoint == 'report_found' %}class="is-active"{% endif %}>Report Found</a>
           <a href="{{ url_for('my_reports') }}" {% if request.endpoint == 'my_reports' %}class="is-active"{% endif %}>My Reports</a>
+          <a href="{{ url_for('my_claims') }}" {% if request.endpoint == 'my_claims' %}class="is-active"{% endif %}>My Claims</a>
         {% elif current_user and current_user.role == 'ADMIN' %}
           <a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}class="is-active"{% endif %}>Admin Dashboard</a>
           <a href="{{ url_for('admin_reports') }}" {% if request.endpoint == 'admin_reports' or request.endpoint == 'admin_moderate_report' or request.endpoint == 'admin_resolve_report' %}class="is-active"{% endif %}>Manage Reports</a>

@@ -6,49 +6,37 @@
   <h1>Claim This Item</h1>
   <p class="muted">{{ item.item_name }} &middot; {{ item.category }} &middot; {{ item.location }}</p>
   <p>Tracking ID: <span class="tracking">{{ tracking_id }}</span></p>
+  <p class="notice">Claims are private and remain pending until an Admin reviews your evidence.</p>
 
-  <h2 class="sub">Verification Question</h2>
-  <p class="question">{{ item.secret_hint }}</p>
+  <form method="post" novalidate data-validate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="field">
+      <label for="evidence">Ownership evidence <span class="req">*</span></label>
+      <textarea id="evidence" name="evidence" rows="4" maxlength="1200" required
+                placeholder="Describe specific details that establish this item is yours.">{{ form_evidence or '' }}</textarea>
+      <p class="help">Do not include passwords, financial details, or another person's private information.</p>
+    </div>
 
-  {% if verified %}
-    <p class="notice notice-good">Verification Successful.</p>
-    {% if item.status != 'RESOLVED' %}
-      <form method="post" action="{{ url_for('resolve', item_id=item.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <button class="btn btn-success" type="submit">Mark as RESOLVED</button>
-      </form>
-    {% else %}
-      <p class="notice notice-good">This item is already marked RESOLVED.</p>
-    {% endif %}
-    {% if claim_id %}
-      <form method="post" action="{{ url_for('dispute_own_claim', claim_id=claim_id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <button class="btn btn-ghost" type="submit">Request staff review</button>
-      </form>
-    {% endif %}
-  {% else %}
-    <form method="post" novalidate data-validate>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <div class="field">
-        <label for="answer">Your answer <span class="req">*</span></label>
-        <input type="text" id="answer" name="answer" required autocomplete="off"
-               placeholder="Type your answer" />
-        <p class="help">Answers ignore capitalisation and extra spaces.</p>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit">Verify Ownership</button>
-    </form>
-    {% if claim_failed %}
-      <form method="post" action="{{ url_for('request_claim_review', item_id=item.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <div class="field">
-          <label for="reason">Request staff review</label>
-          <textarea id="reason" name="reason" maxlength="500" required
-                    placeholder="Tell staff why this claim needs review"></textarea>
-        </div>
-        <button class="btn btn-ghost" type="submit">Send review request</button>
-      </form>
-    {% endif %}
-  {% endif %}
+    <div class="field">
+      <label for="linked_lost_item_id">Link one of your lost reports (optional)</label>
+      <select id="linked_lost_item_id" name="linked_lost_item_id">
+        <option value="">No linked report</option>
+        {% for lost in lost_reports %}
+          <option value="{{ lost.id }}" {% if selected_lost_report|string == lost.id|string %}selected{% endif %}>
+            {{ lost.item_name }} · {{ lost.item_date | nice_date }}
+          </option>
+        {% endfor %}
+      </select>
+      <p class="help">Linking requires the private answer you set on that report. It is checked by the server and never saved with the claim.</p>
+    </div>
+
+    <div class="field">
+      <label for="lost_answer">Answer for the linked lost report</label>
+      <input type="password" id="lost_answer" name="lost_answer" maxlength="120"
+             autocomplete="off" />
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Submit Claim for Review</button>
+  </form>
 
   <p><a href="{{ url_for('item_details', item_id=item.id) }}">Back to item details</a></p>
 </section>

@@ -245,40 +245,121 @@ class RoleAuthorizationTests(unittest.TestCase):
         response = self.client.get("/admin/reports")
         self.assertNotIn(b"private@example.edu", response.get_data())
         self.assertNotIn(b"Private answer", response.get_data())
+        self.assertNotIn(b"Private question", response.get_data())
 
-    def test_claim_review_does_not_store_answer_and_admin_can_resolve(self):
+    def test_lost_report_submission_assigns_owner_and_private_verification(self):
         self.login("student@example.edu")
-        token = self.csrf_token(path="/item/%d/claim" % self.item_id)
+        token = self.csrf_token(path="/report/lost")
         response = self.client.post(
-            "/item/%d/claim" % self.item_id,
-            data={"csrf_token": token, "answer": "incorrect"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Request staff review", response.get_data())
-
-        response = self.client.post(
-            "/item/%d/claim/review" % self.item_id,
+            "/report/lost",
             data={
                 "csrf_token": token,
-                "reason": "The owner cannot answer the verification question.",
+                "item_name": "Blue backpack",
+                "category": "Accessories",
+                "location": "Library",
+                "item_date": "2026-10-24",
+                "description": "Blue canvas bag with a stitched patch.",
+                "secret_hint": "What is stitched on the front?",
+                "secret_answer": "a patch",
             },
         )
         self.assertEqual(response.status_code, 302)
+        lost_id = int(response.headers["Location"].rsplit("/", 1)[-1].split("?")[0])
+        self.assertEqual(db.get_item_owner_id(lost_id), self.student_id)
+        detail = self.client.get("/item/%d" % lost_id).get_data()
+        self.assertNotIn(b"What is stitched on the front?", detail)
+        self.assertNotIn(b"a patch", detail)
 
+    def test_found_report_does_not_require_or_store_secret_verification(self):
+        self.login("student@example.edu")
+        form = self.client.get("/report/found").get_data()
+        self.assertNotIn(b"Secret Verification Question", form)
+        self.assertNotIn(b"Secret Verification Answer", form)
+        token = self.csrf_token(path="/report/found")
+        response = self.client.post(
+            "/report/found",
+            data={
+                "csrf_token": token,
+                "item_name": "Red umbrella",
+                "category": "Other",
+                "location": "Canteen",
+                "item_date": "2026-10-24",
+                "description": "Red umbrella left by the entrance.",
+                "secret_hint": "should be ignored",
+                "secret_answer": "should not be saved",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        conn = db.get_connection()
+        try:
+            item = conn.execute(
+                "SELECT secret_hint, secret_answer FROM items WHERE item_name = ?",
+                ("Red umbrella",),
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(item["secret_hint"], "")
+        self.assertEqual(item["secret_answer"], "")
+
+    def test_claim_requires_owned_lost_answer_and_admin_decision_before_resolution(self):
+        lost_id = db.insert_item(
+            {
+                "item_name": "Test item",
+                "category": "Electronics",
+                "status": "LOST",
+                "location": "Library",
+                "item_date": "2026-10-24",
+                "description": "A test device with a private identifying mark.",
+                "contact": "",
+                "secret_hint": "Private question",
+                "secret_answer": "Private answer",
+            },
+            owner_id=self.student_id,
+        )
+        self.login("student@example.edu")
+        token = self.csrf_token(path="/item/%d/claim" % self.item_id)
+
+        invalid = self.client.post(
+            "/item/%d/claim" % self.item_id,
+            data={
+                "csrf_token": token,
+                "evidence": "It has a private identifying mark.",
+                "linked_lost_item_id": lost_id,
+                "lost_answer": "wrong answer",
+            },
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(db.get_user_claims(self.student_id), [])
+
+        response = self.client.post(
+            "/item/%d/claim" % self.item_id,
+            data={
+                "csrf_token": token,
+                "evidence": "It has a private identifying mark.",
+                "linked_lost_item_id": lost_id,
+                "lost_answer": " private ANSWER ",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
+        self.assertIn(b"Pending Admin review", self.client.get("/my-claims").get_data())
         conn = db.get_connection()
         try:
             claim = conn.execute("SELECT * FROM claims").fetchone()
             self.assertEqual(claim["status"], "PENDING")
-            self.assertNotIn("answer", claim.keys())
             self.assertNotIn("secret_answer", claim.keys())
+            self.assertEqual(claim["evidence"], "It has a private identifying mark.")
+            self.assertEqual(claim["linked_lost_item_id"], lost_id)
         finally:
             conn.close()
 
         admin_client = campus_app.app.test_client()
         self.login("admin@example.edu", admin_client)
+        self.assertFalse(db.admin_set_item_resolved(self.item_id))
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
         admin_token = self.csrf_token(admin_client, "/admin/claims")
         self.assertIn(
-            b"The owner cannot answer the verification question.",
+            b"It has a private identifying mark.",
             admin_client.get("/admin/claims").get_data(),
         )
         response = admin_client.post(
@@ -286,24 +367,152 @@ class RoleAuthorizationTests(unittest.TestCase):
             data={"csrf_token": admin_token, "decision": "APPROVED"},
         )
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
+        admin_token = self.csrf_token(admin_client, "/admin/reports")
+        response = admin_client.post(
+            "/admin/reports/%d/resolve" % self.item_id,
+            data={"csrf_token": admin_token},
+        )
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(db.get_item(self.item_id)["status"], "RESOLVED")
 
-    def test_verified_claim_can_still_resolve_item(self):
+    def test_student_cannot_resolve_a_report_directly(self):
         self.login("student@example.edu")
         token = self.csrf_token(path="/item/%d/claim" % self.item_id)
-        response = self.client.post(
-            "/item/%d/claim" % self.item_id,
-            data={"csrf_token": token, "answer": "  private ANSWER  "},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Verification Successful", response.get_data())
-
         response = self.client.post(
             "/item/%d/resolve" % self.item_id,
             data={"csrf_token": token},
         )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
+
+    def test_claim_submission_for_own_found_report_is_forbidden(self):
+        own_item_id = db.insert_item(
+            {
+                "item_name": "Own found item",
+                "category": "Other",
+                "status": "FOUND",
+                "location": "Library",
+                "item_date": "2026-10-24",
+                "description": "Found item posted by this student.",
+                "contact": "",
+                "secret_hint": "",
+                "secret_answer": "",
+            },
+            owner_id=self.student_id,
+        )
+        self.login("student@example.edu")
+        self.assertEqual(
+            self.client.get("/item/%d/claim" % own_item_id).status_code, 403
+        )
+
+    def test_rejected_claim_status_is_visible_to_claimant(self):
+        self.login("student@example.edu")
+        token = self.csrf_token(path="/item/%d/claim" % self.item_id)
+        response = self.client.post(
+            "/item/%d/claim" % self.item_id,
+            data={
+                "csrf_token": token,
+                "evidence": "I can identify a mark on the item.",
+            },
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(db.get_item(self.item_id)["status"], "RESOLVED")
+        claim_id = db.get_user_claims(self.student_id)[0]["id"]
+
+        admin_client = campus_app.app.test_client()
+        self.login("admin@example.edu", admin_client)
+        token = self.csrf_token(admin_client, "/admin/claims")
+        response = admin_client.post(
+            "/admin/claims/%d/review" % claim_id,
+            data={"csrf_token": token, "decision": "REJECTED"},
+        )
+        self.assertEqual(response.status_code, 302)
+        page = self.client.get("/my-claims").get_data()
+        self.assertIn(b"Rejected", page)
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
+
+    def test_admin_cannot_resolve_item_without_approved_claim(self):
+        self.login("admin@example.edu")
+        self.assertFalse(db.admin_set_item_resolved(self.item_id))
+        self.assertEqual(db.get_item(self.item_id)["status"], "FOUND")
+
+    def test_search_filters_and_existing_matcher_find_reports(self):
+        lost = {
+            "id": 10,
+            "item_name": "Casio fx-991CW Calculator",
+            "category": "Electronics",
+            "location": "Physics Lab",
+            "item_date": "2026-10-24",
+            "description": "Black calculator with a red sticker.",
+        }
+        found = {
+            "id": 11,
+            "item_name": "Casio Scientific Calculator",
+            "category": "Electronics",
+            "location": "Physics Lab",
+            "item_date": "2026-10-24",
+            "description": "Black scientific calculator with red sticker.",
+        }
+        import matching
+
+        self.assertTrue(matching.find_matches(found, [lost]))
+
+        db.insert_item(
+            {
+                "item_name": "Blue backpack",
+                "category": "Accessories",
+                "status": "LOST",
+                "location": "Library",
+                "item_date": "2026-10-24",
+                "description": "Blue canvas bag.",
+                "contact": "",
+                "secret_hint": "Patch color?",
+                "secret_answer": "Yellow",
+            },
+            owner_id=self.student_id,
+        )
+        results = db.search_items(
+            query="backpack", category="Accessories", location="Library", status="LOST"
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["item_name"], "Blue backpack")
+
+    def test_item_details_matches_both_lost_and_found_directions(self):
+        lost_id = db.insert_item(
+            {
+                "item_name": "Casio fx-991CW Calculator",
+                "category": "Electronics",
+                "status": "LOST",
+                "location": "Physics Lab",
+                "item_date": "2026-10-24",
+                "description": "Black calculator with a red sticker.",
+                "contact": "",
+                "secret_hint": "What sticker?",
+                "secret_answer": "Red",
+            },
+            owner_id=self.student_id,
+        )
+        found_id = db.insert_item(
+            {
+                "item_name": "Casio Scientific Calculator",
+                "category": "Electronics",
+                "status": "FOUND",
+                "location": "Physics Lab",
+                "item_date": "2026-10-24",
+                "description": "Black scientific calculator with red sticker.",
+                "contact": "",
+                "secret_hint": "",
+                "secret_answer": "",
+            },
+            owner_id=self.admin_id,
+        )
+        page = self.client.get("/item/%d" % found_id).get_data()
+        self.assertIn(b"Reported Lost Items That Match", page)
+        self.assertIn(b"Casio fx-991CW Calculator", page)
+
+        page = self.client.get("/item/%d" % lost_id).get_data()
+        self.assertIn(b"Reported Found Items That Match", page)
+        self.assertIn(b"Casio Scientific Calculator", page)
 
     def test_existing_user_schema_migrates_to_student(self):
         legacy_path = os.path.join(self.temp_dir.name, "legacy.db")

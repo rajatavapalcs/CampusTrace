@@ -32,8 +32,8 @@
 </div>
 
 <div class="field">
-  <label for="description">Description</label>
-  <textarea id="description" name="description" rows="3"
+  <label for="description">Description <span class="req">*</span></label>
+  <textarea id="description" name="description" rows="3" required maxlength="1000"
             placeholder="Black calculator with a red sticker on the back.">{{ form.description or '' }}</textarea>
 </div>
 
@@ -44,11 +44,12 @@
   <p class="help">{{ contact_help }}</p>
 </div>
 
+{% if date_label == 'Date Lost' %}
 <fieldset class="secret-box">
   <legend>Ownership verification</legend>
   <p class="help">
-    Only the question is ever shown publicly. The answer stays on the server and is never
-    sent to the browser.
+    Set a private question and answer. They are used only to verify your own lost report
+    and are never shown on public item pages or to Admin reviewers.
   </p>
   <div class="field">
     <label for="secret_hint">Secret Verification Question <span class="req">*</span></label>
@@ -58,8 +59,9 @@
   </div>
   <div class="field">
     <label for="secret_answer">Secret Verification Answer <span class="req">*</span></label>
-    <input type="text" id="secret_answer" name="secret_answer" required maxlength="120"
+    <input type="password" id="secret_answer" name="secret_answer" required maxlength="120"
            placeholder="Red" value="" />
   </div>
 </fieldset>
+{% endif %}
 {% endmacro %}
