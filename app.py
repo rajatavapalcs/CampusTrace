@@ -170,23 +170,20 @@ def common_context():
 
 def read_form(status):
     """Trim input and validate on the server. Returns (data, errors)."""
+    category_option = (request.form.get("category") or "").strip()
+    custom_category = (request.form.get("custom_category") or "").strip()
     data = {
         "item_name": (request.form.get("item_name") or "").strip(),
-        "category": (request.form.get("category") or "").strip(),
+        "category": custom_category if category_option == "Other" else category_option,
+        "category_option": category_option,
+        "custom_category": custom_category,
         "location": (request.form.get("location") or "").strip(),
+        "location_details": (request.form.get("location_details") or "").strip(),
         "item_date": (request.form.get("item_date") or "").strip(),
         "description": (request.form.get("description") or "").strip(),
         "contact": (request.form.get("contact") or "").strip(),
-        "secret_hint": (
-            (request.form.get("secret_hint") or "").strip()
-            if status == "LOST"
-            else ""
-        ),
-        "secret_answer": (
-            (request.form.get("secret_answer") or "").strip()
-            if status == "LOST"
-            else ""
-        ),
+        "secret_hint": (request.form.get("secret_hint") or "").strip(),
+        "secret_answer": (request.form.get("secret_answer") or "").strip(),
         "status": status,
     }
 
@@ -199,18 +196,30 @@ def read_form(status):
             }
         )
     errors = [label for field, label in fields.items() if not data[field]]
+    if category_option not in db.CATEGORIES:
+        errors.append("Category")
+    elif category_option == "Other":
+        if not custom_category:
+            errors.append("Custom category")
+        elif len(custom_category) > 80:
+            errors.append("Custom category must be 80 characters or fewer.")
+    elif custom_category:
+        errors.append("Custom category")
+
+    if status == "FOUND" and bool(data["secret_hint"]) != bool(data["secret_answer"]):
+        errors.append("Enter both the secret verification question and answer, or leave both blank.")
+
     limits = {
         "item_name": 120,
         "description": 1000,
         "contact": 200,
+        "location_details": 200,
         "secret_hint": 160,
         "secret_answer": 120,
     }
     for field, maximum in limits.items():
         if len(data[field]) > maximum:
             errors.append("%s must be %d characters or fewer." % (field.replace("_", " ").title(), maximum))
-    if data["category"] and data["category"] not in db.CATEGORIES:
-        errors.append("Category")
     if data["location"] and data["location"] not in db.LOCATIONS:
         errors.append("Location")
     try:
@@ -384,6 +393,7 @@ def search():
         selected_category=category,
         selected_location=location,
         selected_status=status,
+        search_categories=db.get_categories_with_items(),
         tracking_id=db.tracking_id,
         **common_context()
     )
@@ -725,4 +735,4 @@ def server_error(_error):
 if __name__ == "__main__":
     db.init_db()
     db.seed_sample_data()
-    app.run(debug=True)
+    app.run()

@@ -14,6 +14,7 @@
             <th>Item</th>
             <th>Status</th>
             <th>Evidence submitted</th>
+            <th>Found reporter contact</th>
             <th>Submitted</th>
             <th>Reviewed</th>
           </tr>
@@ -36,6 +37,13 @@
                 {% endif %}
               </td>
               <td>{{ claim.evidence }}</td>
+              <td>
+                {% if claim.status == 'APPROVED' %}
+                  {{ claim.reporter_contact or 'Not provided' }}
+                {% else %}
+                  Available after Admin approval
+                {% endif %}
+              </td>
               <td>{{ claim.created_at }}</td>
               <td>{{ claim.reviewed_at or 'Not reviewed' }}</td>
             </tr>

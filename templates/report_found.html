@@ -22,6 +22,9 @@
             <dl class="meta">
               <div><dt>Category</dt><dd>{{ m.category }}</dd></div>
               <div><dt>Location</dt><dd>{{ m.location }}</dd></div>
+              {% if m.location_details %}
+                <div><dt>Exact Location</dt><dd>{{ m.location_details }}</dd></div>
+              {% endif %}
               <div><dt>Date</dt><dd>{{ m.item_date | nice_date }}</dd></div>
             </dl>
             <p class="description">{{ m.description }}</p>

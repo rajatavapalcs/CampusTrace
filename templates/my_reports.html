@@ -16,6 +16,7 @@
             <th>Category</th>
             <th>Status</th>
             <th>Location</th>
+            <th>Exact Location</th>
             <th>Date</th>
           </tr>
         </thead>
@@ -27,6 +28,7 @@
               <td>{{ item.category }}</td>
               <td><span class="badge badge-{{ item.status | lower }}">{{ item.status }}</span></td>
               <td>{{ item.location }}</td>
+              <td>{{ item.location_details or '' }}</td>
               <td>{{ item.item_date | nice_date }}</td>
             </tr>
           {% endfor %}

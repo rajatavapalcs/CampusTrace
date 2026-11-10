@@ -1,3 +1,17 @@
+{% macro password_visibility_toggle(label) %}
+<button class="visibility-toggle" type="button" aria-label="{{ label }}"
+        title="{{ label }}">
+  <svg data-icon-show viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"></path>
+    <circle cx="12" cy="12" r="3"></circle>
+  </svg>
+  <svg data-icon-hide class="icon-hidden" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"></path>
+    <path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a15.7 15.7 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10.7 10.7 0 0 0 3.1-.5"></path>
+  </svg>
+</button>
+{% endmacro %}
+
 {% macro item_fields(form, categories, locations, contact_label, contact_help, date_label) %}
 <div class="field">
   <label for="item_name">Item Name <span class="req">*</span></label>
@@ -11,7 +25,7 @@
     <select id="category" name="category" required>
       <option value="">Select a category</option>
       {% for c in categories %}
-        <option value="{{ c }}" {% if form.category == c %}selected{% endif %}>{{ c }}</option>
+        <option value="{{ c }}" {% if (form.category_option or form.category) == c %}selected{% endif %}>{{ c }}</option>
       {% endfor %}
     </select>
   </div>
@@ -24,6 +38,22 @@
       {% endfor %}
     </select>
   </div>
+</div>
+
+<div class="field">
+  <label for="location_details">Exact Location</label>
+  <input type="text" id="location_details" name="location_details" maxlength="200"
+         placeholder="For example: Physics Lab, second bench by the window"
+         value="{{ form.location_details or '' }}" />
+</div>
+
+<div class="field custom-category-field" id="customCategoryField"
+     {% if (form.category_option or form.category) != 'Other' %}hidden{% endif %}>
+  <label for="custom_category">Item Category <span class="req">*</span></label>
+  <input type="text" id="custom_category" name="custom_category" maxlength="80"
+         placeholder="Enter your item category"
+         value="{{ form.custom_category or '' }}"
+         {% if (form.category_option or form.category) == 'Other' %}required{% endif %} />
 </div>
 
 <div class="field">
@@ -44,24 +74,32 @@
   <p class="help">{{ contact_help }}</p>
 </div>
 
-{% if date_label == 'Date Lost' %}
 <fieldset class="secret-box">
-  <legend>Ownership verification</legend>
+  <legend>{{ 'Ownership verification' if date_label == 'Date Lost' else 'Private verification (optional)' }}</legend>
   <p class="help">
-    Set a private question and answer. They are used only to verify your own lost report
-    and are never shown on public item pages or to Admin reviewers.
+    {% if date_label == 'Date Lost' %}
+      Set a private question and answer. They are used only to verify your own lost report
+      and are never shown on public item pages or to Admin reviewers.
+    {% else %}
+      You may provide a private question and answer. They are stored privately and are never
+      shown on public item pages or to Admin reviewers.
+    {% endif %}
   </p>
   <div class="field">
-    <label for="secret_hint">Secret Verification Question <span class="req">*</span></label>
-    <input type="text" id="secret_hint" name="secret_hint" required maxlength="160"
+    <label for="secret_hint">Secret Verification Question{% if date_label == 'Date Lost' %} <span class="req">*</span>{% endif %}</label>
+    <input type="text" id="secret_hint" name="secret_hint"
+           {% if date_label == 'Date Lost' %}required{% endif %} maxlength="160"
            placeholder="What colour sticker is on the back of the calculator?"
            value="{{ form.secret_hint or '' }}" />
   </div>
   <div class="field">
-    <label for="secret_answer">Secret Verification Answer <span class="req">*</span></label>
-    <input type="password" id="secret_answer" name="secret_answer" required maxlength="120"
-           placeholder="Red" value="" />
+    <label for="secret_answer">Secret Verification Answer{% if date_label == 'Date Lost' %} <span class="req">*</span>{% endif %}</label>
+    <div class="input-with-toggle">
+      <input type="password" id="secret_answer" name="secret_answer"
+             {% if date_label == 'Date Lost' %}required{% endif %} maxlength="120"
+             placeholder="Red" value="" data-password-toggle />
+      {{ password_visibility_toggle('Show secret answer') }}
+    </div>
   </div>
 </fieldset>
-{% endif %}
 {% endmacro %}

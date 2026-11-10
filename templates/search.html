@@ -14,7 +14,7 @@
         <label for="category">Category</label>
         <select id="category" name="category">
           <option value="All">All</option>
-          {% for c in categories %}
+          {% for c in search_categories %}
             <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
           {% endfor %}
         </select>
@@ -58,6 +58,9 @@
           <dl class="meta">
             <div><dt>Category</dt><dd>{{ item.category }}</dd></div>
             <div><dt>Location</dt><dd>{{ item.location }}</dd></div>
+            {% if item.location_details %}
+              <div><dt>Exact Location</dt><dd>{{ item.location_details }}</dd></div>
+            {% endif %}
             <div><dt>Date</dt><dd>{{ item.item_date | nice_date }}</dd></div>
           </dl>
           <p class="description">{{ item.description }}</p>

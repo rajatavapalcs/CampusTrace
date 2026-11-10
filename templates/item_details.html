@@ -15,6 +15,9 @@
   <dl class="meta meta-wide">
     <div><dt>Category</dt><dd>{{ item.category }}</dd></div>
     <div><dt>Location</dt><dd>{{ item.location }}</dd></div>
+    {% if item.location_details %}
+      <div><dt>Exact Location</dt><dd>{{ item.location_details }}</dd></div>
+    {% endif %}
     <div><dt>Date</dt><dd>{{ item.item_date | nice_date }}</dd></div>
     <div><dt>Tracking ID</dt><dd class="tracking">{{ tracking_id }}</dd></div>
   </dl>
@@ -49,6 +52,9 @@
           <dl class="meta">
             <div><dt>Category</dt><dd>{{ m.category }}</dd></div>
             <div><dt>Location</dt><dd>{{ m.location }}</dd></div>
+            {% if m.location_details %}
+              <div><dt>Exact Location</dt><dd>{{ m.location_details }}</dd></div>
+            {% endif %}
             <div><dt>Date</dt><dd>{{ m.item_date | nice_date }}</dd></div>
           </dl>
           <p class="description">{{ m.description }}</p>

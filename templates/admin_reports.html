@@ -27,6 +27,9 @@
                 <span class="muted small">
                   {{ item.category }} · {{ item.location }} · {{ item.item_date | nice_date }}
                 </span>
+                {% if item.location_details %}
+                  <br /><span class="muted small">{{ item.location_details }}</span>
+                {% endif %}
                 <br />
                 <span class="small">{{ item.description or 'No description provided.' }}</span>
               </td>

@@ -389,6 +389,40 @@ input:focus, select:focus, textarea:focus {
 }
 input.invalid, select.invalid, textarea.invalid { border-bottom-color: var(--brick); }
 .field-error { color: var(--brick); font-size: 0.83rem; margin: 4px 0 0; }
+.input-with-toggle { position: relative; }
+.input-with-toggle input { padding-right: 48px; }
+.visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  transform: translateY(-50%);
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.visibility-toggle:hover,
+.visibility-toggle:focus-visible {
+  color: var(--pine);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.visibility-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.visibility-toggle .icon-hidden { display: none !important; }
 .secret-box {
   border: 1px solid var(--line);
   background: var(--white);

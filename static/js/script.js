@@ -1,6 +1,6 @@
 /* CampusTrace - vanilla JavaScript only.
    Frontend validation and the mobile menu. The server always validates again,
-   and no secret answer is ever sent to the browser. */
+   and stored secret answers are never included in public response data. */
 
 (function () {
   "use strict";
@@ -12,6 +12,47 @@
     toggle.addEventListener("click", function () {
       nav.classList.toggle("open");
     });
+  }
+
+  // Password and private-answer visibility controls
+  var passwordInputs = document.querySelectorAll("[data-password-toggle]");
+  Array.prototype.forEach.call(passwordInputs, function (input) {
+    var wrapper = input.parentNode;
+    var button = wrapper.querySelector(".visibility-toggle");
+    if (!button) return;
+
+    var showLabel = button.getAttribute("aria-label") || "Show password";
+    var hideLabel = showLabel.replace(/^Show/, "Hide");
+    var showIcon = button.querySelector("[data-icon-show]");
+    var hideIcon = button.querySelector("[data-icon-hide]");
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      var isVisible = input.type === "text";
+      input.type = isVisible ? "password" : "text";
+      button.setAttribute("aria-label", isVisible ? showLabel : hideLabel);
+      button.setAttribute("title", isVisible ? showLabel : hideLabel);
+      showIcon.classList.toggle("icon-hidden", !isVisible);
+      hideIcon.classList.toggle("icon-hidden", isVisible);
+    });
+  });
+
+  // A custom category is required only while "Other" is selected.
+  var categorySelect = document.getElementById("category");
+  var customCategory = document.getElementById("custom_category");
+  var customCategoryField = document.getElementById("customCategoryField");
+  if (categorySelect && customCategory && customCategoryField) {
+    function updateCustomCategory() {
+      var isOther = categorySelect.value === "Other";
+      customCategoryField.hidden = !isOther;
+      customCategory.required = isOther;
+      if (!isOther) {
+        customCategory.value = "";
+        clearError(customCategory);
+      }
+    }
+
+    categorySelect.addEventListener("change", updateCustomCategory);
+    updateCustomCategory();
   }
 
   // Browser history does not expose entry URLs. Mark same-origin link entries

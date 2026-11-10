@@ -4,6 +4,7 @@ Everything here uses Python's built-in sqlite3 module and parameterized
 queries only (no string concatenation of user input into SQL).
 """
 
+import hmac
 import os
 import sqlite3
 from datetime import datetime
@@ -48,8 +49,24 @@ ROLES = ("STUDENT", "ADMIN")
 # Public columns only. The secret answer is never part of this list, so it can
 # never leak into a template, a card or an API response by accident.
 PUBLIC_COLUMNS = (
-    "id, item_name, category, status, location, item_date, description, created_at"
+    "id, item_name, category, status, location, location_details, item_date, "
+    "description, created_at"
 )
+SECRET_ANSWER_HASH_PREFIX = "ct-answer-v1$"
+
+
+def _normalize_secret_answer(answer):
+    return (answer or "").strip().lower()
+
+
+def _hash_secret_answer(answer):
+    return SECRET_ANSWER_HASH_PREFIX + generate_password_hash(
+        _normalize_secret_answer(answer)
+    )
+
+
+def _is_secret_answer_hash(value):
+    return value.startswith(SECRET_ANSWER_HASH_PREFIX)
 
 
 def get_connection():
@@ -74,6 +91,7 @@ def init_db():
             "items": {
                 "is_hidden": "INTEGER NOT NULL DEFAULT 0 CHECK (is_hidden IN (0, 1))",
                 "owner_id": "INTEGER REFERENCES users(id) ON DELETE SET NULL",
+                "location_details": "TEXT",
             },
             "claims": {
                 "evidence": "TEXT",
@@ -91,6 +109,15 @@ def init_db():
                         "ALTER TABLE %s ADD COLUMN %s %s"
                         % (table, column, definition)
                     )
+        legacy_answers = conn.execute(
+            "SELECT id, secret_answer FROM items WHERE secret_answer != ''"
+        ).fetchall()
+        for row in legacy_answers:
+            if not _is_secret_answer_hash(row["secret_answer"]):
+                conn.execute(
+                    "UPDATE items SET secret_answer = ? WHERE id = ?",
+                    (_hash_secret_answer(row["secret_answer"]), row["id"]),
+                )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_items_owner_status ON items(owner_id, status)"
         )
@@ -109,26 +136,30 @@ def tracking_id(item_id, status):
 
 
 def insert_item(data, owner_id=None):
+    secret_answer = data.get("secret_answer", "")
+    if secret_answer:
+        secret_answer = _hash_secret_answer(secret_answer)
     conn = get_connection()
     try:
         cursor = conn.execute(
             """
             INSERT INTO items (
-                item_name, category, status, location, item_date,
+                item_name, category, status, location, location_details, item_date,
                 description, contact, secret_hint, secret_answer, created_at,
                 owner_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["item_name"],
                 data["category"],
                 data["status"],
                 data["location"],
+                data.get("location_details", ""),
                 data["item_date"],
                 data.get("description", ""),
                 data.get("contact", ""),
                 data["secret_hint"],
-                data["secret_answer"],
+                secret_answer,
                 datetime.now().isoformat(timespec="seconds"),
                 owner_id,
             ),
@@ -224,6 +255,24 @@ def get_items_by_status(status):
         conn.close()
 
 
+def get_categories_with_items():
+    """Return predefined categories plus any custom categories already stored."""
+    placeholders = ",".join("?" for _ in CATEGORIES)
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT category FROM items
+            WHERE is_hidden = 0 AND category NOT IN (%s)
+            ORDER BY LOWER(category), category
+            """ % placeholders,
+            tuple(CATEGORIES),
+        ).fetchall()
+        return CATEGORIES + [row["category"] for row in rows]
+    finally:
+        conn.close()
+
+
 def get_items_by_ids(ids):
     if not ids:
         return []
@@ -245,9 +294,15 @@ def search_items(query="", category="All", location="All", status="All"):
     params = []
 
     if query:
-        sql += " AND (LOWER(item_name) LIKE ? OR LOWER(description) LIKE ?)"
+        sql += """
+            AND (
+                LOWER(item_name) LIKE ?
+                OR LOWER(description) LIKE ?
+                OR LOWER(COALESCE(location_details, '')) LIKE ?
+            )
+        """
         like = "%" + query.lower() + "%"
-        params.extend([like, like])
+        params.extend([like, like, like])
     if category and category != "All":
         sql += " AND category = ?"
         params.append(category)
@@ -302,7 +357,17 @@ def check_owned_lost_answer(user_id, item_id, submitted_answer):
         conn.close()
     if row is None or not row["secret_answer"]:
         return False
-    return row["secret_answer"].strip().lower() == (submitted_answer or "").strip().lower()
+    stored_answer = row["secret_answer"]
+    normalized_answer = _normalize_secret_answer(submitted_answer)
+    if _is_secret_answer_hash(stored_answer):
+        return check_password_hash(
+            stored_answer[len(SECRET_ANSWER_HASH_PREFIX):],
+            normalized_answer,
+        )
+    return hmac.compare_digest(
+        stored_answer.strip().lower().encode("utf-8"),
+        normalized_answer.encode("utf-8"),
+    )
 
 
 def admin_set_item_resolved(item_id):
@@ -450,7 +515,20 @@ def get_user_claims(user_id):
         return conn.execute(
             """
             SELECT claims.id, claims.item_id, claims.status, claims.evidence,
-                   claims.created_at, claims.reviewed_at, items.item_name
+                   claims.created_at, claims.reviewed_at, items.item_name,
+                   CASE
+                       WHEN claims.status = 'APPROVED'
+                           AND items.status IN ('FOUND', 'RESOLVED')
+                           AND items.is_hidden = 0
+                           AND NOT EXISTS (
+                               SELECT 1 FROM claims AS other_claim
+                               WHERE other_claim.item_id = claims.item_id
+                                 AND other_claim.id != claims.id
+                                 AND other_claim.status = 'APPROVED'
+                           )
+                       THEN items.contact
+                       ELSE NULL
+                   END AS reporter_contact
             FROM claims
             JOIN items ON items.id = claims.item_id
             WHERE claims.user_id = ?
@@ -486,6 +564,18 @@ def review_claim(claim_id, admin_id, decision):
         ):
             conn.rollback()
             return False
+        if decision == "APPROVED":
+            already_approved = conn.execute(
+                """
+                SELECT 1 FROM claims
+                WHERE item_id = ? AND id != ? AND status = 'APPROVED'
+                LIMIT 1
+                """,
+                (row["item_id"], claim_id),
+            ).fetchone()
+            if already_approved:
+                conn.rollback()
+                return False
         conn.execute(
             """
             UPDATE claims

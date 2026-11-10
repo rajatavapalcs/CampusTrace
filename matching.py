@@ -119,11 +119,40 @@ def calculate_match_score(found_item, lost_item):
 def find_matches(found_item, lost_items, threshold=MATCH_THRESHOLD):
     """Public match cards only: name, score, category, location, date, description."""
     matches = []
+    try:
+        matching_status = found_item["status"]
+    except (KeyError, IndexError, TypeError):
+        matching_status = None
+    expected_status = {"FOUND": "LOST", "LOST": "FOUND"}.get(matching_status)
+
     for lost in lost_items:
         if lost["id"] == found_item["id"]:
             continue
+        if expected_status:
+            try:
+                candidate_status = lost["status"]
+            except (KeyError, IndexError, TypeError):
+                candidate_status = None
+            if candidate_status != expected_status:
+                continue
+
+        name_similarity = word_overlap_ratio(
+            strip_model_codes(found_item["item_name"]),
+            strip_model_codes(lost["item_name"]),
+        )
+        description_similarity = word_overlap_ratio(
+            found_item.get("description") if isinstance(found_item, dict) else found_item["description"],
+            lost.get("description") if isinstance(lost, dict) else lost["description"],
+        )
+        if not name_similarity and not description_similarity:
+            continue
+
         score = calculate_match_score(found_item, lost)
         if score >= threshold:
+            try:
+                location_details = lost["location_details"]
+            except (KeyError, IndexError, TypeError):
+                location_details = ""
             matches.append(
                 {
                     "id": lost["id"],
@@ -131,6 +160,7 @@ def find_matches(found_item, lost_items, threshold=MATCH_THRESHOLD):
                     "score": score,
                     "category": lost["category"],
                     "location": lost["location"],
+                    "location_details": location_details,
                     "item_date": lost["item_date"],
                     "description": lost["description"],
                 }

@@ -46,20 +46,31 @@ moderation, claim review, account suspension/reactivation, and statistics.
 
 Admins can hide and restore reports or permanently delete a report and its
 associated claim records. Hidden reports are omitted from public search,
-matches, details, and public statistics. Only lost-item reports ask for a
-private verification question and answer; found-item reporters do not provide
-the lost owner's verification data. New reports are associated with their
-authenticated reporter, while old reports keep an unknown owner rather than
-being assigned incorrectly.
+matches, details, and public statistics. Lost-item reports require a private
+verification question and answer; found-item reporters may optionally provide
+their own private question and answer, which do not change ownership
+verification. Secret questions and answers are never included in public report
+data. New reports are associated with their authenticated reporter, while old
+reports keep an unknown owner rather than being assigned incorrectly.
+
+Reports may use any of the predefined categories or enter a custom category
+when selecting **Other**. Custom categories are stored on the report and are
+available in the search category filter. Both report forms also accept an
+optional exact-location detail; it appears in searches, item details, reports,
+and matching cards.
 
 Students submit a private written evidence description to claim a found item.
 They may link one of their own active lost reports; if linked, its answer is
 verified server-side and is not stored with the claim or shown to reviewers.
+Secret answers are hashed in SQLite, and existing plain-text answers are safely
+upgraded during database initialization.
 Claims remain Pending until an Admin approves or rejects them. Only an
-approved claim can be marked returned by an Admin. Students can track their
-claim statuses at `/my-claims`; they cannot resolve reports directly. Matches
-are shown from either the lost or found report using the existing scoring
-system.
+approved claim can view the Found reporter's contact in that claimant's
+`/my-claims` page; contact remains hidden from public pages, other students,
+and pending or rejected claimants. Only an Admin can mark the item returned.
+Students can track their claim statuses at `/my-claims`; they cannot resolve
+reports directly. Matches are shown from either the lost or found report using
+the existing scoring system.
 
 Both roles use the existing shared login page. By default, successful Student
 login redirects to the public/student homepage, while successful Admin login

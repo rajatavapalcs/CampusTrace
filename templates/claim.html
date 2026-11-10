@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_form_fields.html" import password_visibility_toggle %}
 {% block title %}Claim {{ item.item_name }} &middot; CampusTrace{% endblock %}
 
 {% block content %}
@@ -32,8 +33,11 @@
 
     <div class="field">
       <label for="lost_answer">Answer for the linked lost report</label>
-      <input type="password" id="lost_answer" name="lost_answer" maxlength="120"
-             autocomplete="off" />
+      <div class="input-with-toggle">
+        <input type="password" id="lost_answer" name="lost_answer" maxlength="120"
+               autocomplete="off" data-password-toggle />
+        {{ password_visibility_toggle('Show secret answer') }}
+      </div>
     </div>
     <button class="btn btn-primary btn-block" type="submit">Submit Claim for Review</button>
   </form>

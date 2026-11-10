@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS items (
     category TEXT NOT NULL,
     status TEXT NOT NULL,
     location TEXT NOT NULL,
+    location_details TEXT,
     item_date TEXT NOT NULL,
     description TEXT,
     contact TEXT,
