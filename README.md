@@ -84,9 +84,42 @@ Admin-only management endpoints also require a session CSRF token.
 
 Set `CAMPUSTRACE_SECRET_KEY` to a strong secret in the deployment environment.
 The app refuses to start on Render without it; local development uses a
-random, process-local key. On Render, the SQLite database (including role
-assignments and account status) must be on persistent storage if it needs to
-survive instance replacement.
+random, process-local key. `CAMPUSTRACE_DB_PATH` optionally selects the SQLite
+file location; it defaults to `database.db` beside `database.py`, so local
+development continues to work without deployment-specific settings.
+
+### Deploy to Render
+
+1. Push this project to a GitHub repository and create a Render **Web Service**
+   connected to it.
+2. Set the build command to:
+
+   ```sh
+   pip install -r requirements.txt
+   ```
+
+3. Set the start command to initialize the schema and sample data before
+   Gunicorn starts:
+
+   ```sh
+   python -c "import database; database.init_db(); database.seed_sample_data()" && gunicorn app:app
+   ```
+
+4. Add these environment variables to the service:
+   - `CAMPUSTRACE_SECRET_KEY`: a newly generated, strong random secret.
+   - `CAMPUSTRACE_DB_PATH`: `/var/data/database.db`
+5. Attach a persistent disk mounted at `/var/data`. SQLite stores accounts,
+   reports, claims, and admin roles in this file; without persistent storage,
+   that data can be lost when the service is replaced. Check Render's current
+   plan requirements for persistent disks.
+6. After the first deployment, open the Render service shell and run
+   `flask --app app create-admin` to create the first Admin account.
+7. Open the public `onrender.com` URL and test search, reporting, registration,
+   login, and the Admin dashboard.
+
+The database initialization command is part of the Render start command, not a
+change to the app's local startup behavior. It creates the database on first
+deployment and safely keeps existing records on subsequent starts.
 
 ## Files
 
@@ -96,7 +129,7 @@ CampusTrace/
 ├── database.py       # sqlite3 helpers (parameterized queries), seed data
 ├── matching.py       # calculate_match_score() - transparent scoring, no AI
 ├── schema.sql        # items, users, and claim records
-├── requirements.txt  # Flask
+├── requirements.txt  # Flask and Gunicorn
 ├── templates/        # base, index, report_lost, report_found, search,
 │                     # item_details, claim, my_reports, admin pages, error
 └── static/

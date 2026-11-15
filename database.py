@@ -12,7 +12,10 @@ from datetime import datetime
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database.db")
+DB_PATH = os.environ.get(
+    "CAMPUSTRACE_DB_PATH",
+    os.path.join(BASE_DIR, "database.db"),
+)
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
 
 CATEGORIES = [
